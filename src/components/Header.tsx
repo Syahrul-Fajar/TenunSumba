@@ -1,129 +1,140 @@
-import React from 'react';
-import { Menu, X, CheckSquare } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, X } from 'lucide-react';
+
+type Tab = 'home' | 'produk' | 'edukasi' | 'kontak' | 'admin';
 
 interface HeaderProps {
-  currentTab: 'home' | 'produk' | 'kontak' | 'admin';
-  setCurrentTab: (tab: 'home' | 'produk' | 'kontak' | 'admin') => void;
+  currentTab: Tab;
+  setCurrentTab: (tab: Tab) => void;
 }
 
-export default function Header({ currentTab, setCurrentTab }: HeaderProps) {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const [scrolled, setScrolled] = React.useState(false);
+const NAV = [
+  { id: 'home' as const, label: 'Beranda' },
+  { id: 'produk' as const, label: 'Katalog' },
+  { id: 'edukasi' as const, label: 'Edukasi' },
+  { id: 'kontak' as const, label: 'Kontak' },
+];
 
-  React.useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 50);
+export default function Header({ currentTab, setCurrentTab }: HeaderProps) {
+  const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    let ticking = false;
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          setScrolled(window.scrollY > 48);
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const navItems = [
-    { id: 'home', label: 'Home' },
-    { id: 'produk', label: 'Produk' },
-    { id: 'kontak', label: 'Kontak' },
-  ] as const;
+  const handleNav = (tab: Tab) => {
+    setCurrentTab(tab);
+    setOpen(false);
+  };
+
+  // Evaluasi Logika Visual: Transparan hanya di Beranda paling atas
+  const isTransparentDark = currentTab === 'home' && !scrolled;
 
   return (
-    <header 
-      id="app-header"
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled 
-          ? 'bg-white/95 backdrop-blur-md shadow-md py-3' 
-          : 'bg-white py-4 border-b border-brand-cream-dark'
+    <header
+      className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
+        isTransparentDark
+          ? 'bg-transparent py-6'
+          : 'bg-[#FBF8F4]/95 backdrop-blur-md shadow-sm border-b border-[#EFE6DA] py-4'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
-          
-          {/* Logo Brand */}
-          <button 
-            id="brand-logo-btn"
-            onClick={() => { setCurrentTab('home'); window.scrollTo(0, 0); }}
-            className="flex items-center gap-3 text-left focus:outline-none group"
-          >
-            {/* Elegant Golden Traditional Sumba Weaving Pattern Symbol */}
-            <div className="w-10 h-10 flex-shrink-0 bg-brand-brown-dark rounded-md flex items-center justify-center text-brand-gold p-1.5 shadow-sm group-hover:scale-105 transition-transform duration-300">
-              <svg viewBox="0 0 100 100" className="w-full h-full fill-current">
-                {/* Traditional geometric pattern */}
-                <path d="M50,5 L95,50 L50,95 L5,50 Z" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path d="M50,15 L85,50 L50,85 L15,50 Z" stroke="currentColor" strokeWidth="3" fill="none" />
-                <rect x="42" y="42" width="16" height="16" transform="rotate(45 50 50)" />
-                <line x1="15" y1="50" x2="85" y2="50" stroke="currentColor" strokeWidth="3" />
-                <line x1="50" y1="15" x2="50" y2="85" stroke="currentColor" strokeWidth="3" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="font-serif text-lg font-bold tracking-tight text-brand-brown-dark leading-tight">
-                CD Seraphine
-              </h1>
-              <p className="text-xs font-sans tracking-widest text-brand-brown uppercase -mt-0.5">
-                Weetebula
-              </p>
-            </div>
-          </button>
+      <div className="max-w-7xl mx-auto px-5 sm:px-8 flex items-center justify-between">
+        
+        {/* Identitas Brand */}
+        <button
+          onClick={() => handleNav('home')}
+          className="flex items-center gap-3 group focus:outline-none cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-200 bg-gradient-to-br from-[#7B1618] to-[#5A0E10]">
+            <svg viewBox="0 0 40 40" className="w-6 h-6" fill="none">
+              <path d="M20 5 L35 20 L20 35 L5 20 Z" stroke="#C8973A" strokeWidth="2.5" strokeLinejoin="round"/>
+              <path d="M20 12 L28 20 L20 28 L12 20 Z" fill="#C8973A" fillOpacity="0.4"/>
+              <circle cx="20" cy="20" r="2.5" fill="#E0B060"/>
+            </svg>
+          </div>
+          <div className="text-left">
+            <span className={`block font-serif text-[15px] font-bold leading-tight transition-colors duration-200 ${isTransparentDark ? 'text-white drop-shadow-md' : 'text-[#3D1A0A]'}`}>
+              CD Seraphine
+            </span>
+            <span className={`block text-[9px] font-mono uppercase tracking-[0.2em] leading-tight ${isTransparentDark ? 'text-[#E0B060]' : 'text-[#C8973A]'}`}>
+              Weetebula · NTT
+            </span>
+          </div>
+        </button>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            {navItems.map((item) => (
+        {/* Navigasi Desktop */}
+        <nav className="hidden md:flex items-center gap-2">
+          {NAV.map(item => {
+            const isActive = currentTab === item.id;
+            return (
               <button
                 key={item.id}
-                id={`nav-${item.id}-desktop`}
-                onClick={() => {
-                  setCurrentTab(item.id);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={`relative py-2 font-sans text-sm font-medium tracking-wide uppercase transition-colors duration-200 ${
-                  currentTab === item.id 
-                    ? 'text-brand-brown' 
-                    : 'text-gray-600 hover:text-brand-brown-light'
+                onClick={() => handleNav(item.id)}
+                className={`relative px-4 py-2 text-[13px] font-bold rounded-xl transition-all duration-200 cursor-pointer overflow-hidden ${
+                  isActive
+                    ? 'text-[#7B1618] bg-[#7B1618]/10'
+                    : isTransparentDark
+                      ? 'text-white/90 hover:text-white hover:bg-white/10'
+                      : 'text-[#7A6558] hover:text-[#3D1A0A] hover:bg-[#3D1A0A]/5'
                 }`}
               >
                 {item.label}
-                {currentTab === item.id && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-gold rounded-full" />
-                )}
               </button>
-            ))}
-          </nav>
+            );
+          })}
+          <button onClick={() => handleNav('kontak')} className="ml-4 btn-primary">
+            Hubungi Kami
+          </button>
+        </nav>
 
-          {/* Mobile menu toggle button */}
-          <div className="flex md:hidden">
-            <button
-              id="mobile-menu-btn"
-              onClick={() => setIsOpen(!isOpen)}
-              className="p-2 text-brand-brown-dark hover:text-brand-brown hover:bg-brand-cream rounded-md transition duration-150"
-              aria-label="Toggle menu"
-            >
-              {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
-
-        </div>
+        {/* Toggle Mobile */}
+        <button
+          onClick={() => setOpen(!open)}
+          className={`md:hidden p-2.5 rounded-xl transition-colors cursor-pointer ${
+            isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#3D1A0A] hover:bg-[#3D1A0A]/5'
+          }`}
+          aria-label="Toggle menu"
+        >
+          {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
       </div>
 
-      {/* Mobile Menu Panel */}
-      {isOpen && (
-        <div id="mobile-menu-panel" className="md:hidden bg-white border-b border-brand-cream-dark shadow-inner">
-          <div className="px-2 pt-2 pb-4 space-y-1 sm:px-3">
-            {navItems.map((item) => (
+      {/* Panel Navigasi Mobile */}
+      {open && (
+        <div className="md:hidden absolute top-full left-0 right-0 bg-[#FBF8F4] border-b border-[#EFE6DA] px-5 py-4 space-y-2 shadow-xl">
+          {NAV.map(item => {
+            const isActive = currentTab === item.id;
+            return (
               <button
                 key={item.id}
-                id={`nav-${item.id}-mobile`}
-                onClick={() => {
-                  setCurrentTab(item.id);
-                  setIsOpen(false);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={`block w-full text-left px-4 py-3 rounded-md text-base font-medium uppercase tracking-wide transition-colors ${
-                  currentTab === item.id
-                    ? 'bg-brand-cream text-brand-brown border-l-4 border-brand-gold'
-                    : 'text-gray-650 hover:bg-brand-cream/50 hover:text-brand-brown'
+                onClick={() => handleNav(item.id)}
+                className={`flex w-full items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                  isActive 
+                    ? 'bg-[#7B1618] text-white' 
+                    : 'text-[#7A6558] hover:bg-[#EFE6DA] hover:text-[#3D1A0A]'
                 }`}
               >
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-[#C8973A]' : 'bg-[#C8973A]/50'}`} />
                 {item.label}
               </button>
-            ))}
+            );
+          })}
+          <div className="pt-4 mt-2 border-t border-[#EFE6DA]">
+             <button onClick={() => handleNav('kontak')} className="w-full btn-primary py-3">
+               Hubungi Kami
+             </button>
           </div>
         </div>
       )}

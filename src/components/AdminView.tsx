@@ -1,958 +1,842 @@
-import React from 'react';
-import { 
-  Database, 
-  Plus, 
-  Trash2, 
-  Edit, 
-  Inbox, 
-  Package, 
-  Sparkles, 
-  Clock, 
-  Mail, 
-  Lock, 
-  Eye, 
-  AlertCircle, 
-  X, 
-  RefreshCw,
-  TrendingUp,
-  User,
-  Heart
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import {
+  Database, Plus, Trash2, Edit, Package, Clock, Mail, Lock,
+  AlertCircle, X, RefreshCw, TrendingUp, DollarSign, Users,
+  ShoppingCart, MessageSquare, BarChart3, Layers, Eye, Phone, LogOut, Wifi, WifiOff, Star, BookOpen
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, Order, Article } from '../types';
 import { dbService, isSupabaseConfigured } from '../lib/supabase';
 
 interface AdminViewProps {
   onRefresh?: () => void;
+  isAdmin: boolean;
+  setIsAdmin: (val: boolean) => void;
 }
 
-export default function AdminView({ onRefresh }: AdminViewProps) {
-  // Access and Auth states
-  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
-  const [adminUsername, setAdminUsername] = React.useState('');
-  const [adminPassword, setAdminPassword] = React.useState('');
-  const [authError, setAuthError] = React.useState('');
-  
-  // Tab within Admin Panel: 'overview' | 'products' | 'inquiries'
-  const [adminTab, setAdminTab] = React.useState<'overview' | 'products' | 'inquiries'>('overview');
-  
-  // Data lists loading
-  const [products, setProducts] = React.useState<Product[]>([]);
-  const [inquiries, setInquiries] = React.useState<any[]>([]);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [databaseSource, setDatabaseSource] = React.useState<'Supabase' | 'LocalStorage'>('LocalStorage');
+// ─── Utility Formatters ──────────────────────────────────────────────────────
+const formatPrice = (n: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 
-  // Product form states
-  const [editingProduct, setEditingProduct] = React.useState<Partial<Product> | null>(null);
-  const [isFormOpen, setIsFormOpen] = React.useState(false);
-  const [formError, setFormError] = React.useState('');
-  const [btnSaving, setBtnSaving] = React.useState(false);
+const formatDate = (s: string) =>
+  new Date(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  // Copy success feedback state
-  const [sqlCopied, setSqlCopied] = React.useState(false);
+const formatDateTime = (s: string) =>
+  new Date(s).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-  // Load all records
-  const loadData = async () => {
+// ─── Configuration Constants ────────────────────────────────────────────────
+const STATUS_PESANAN: Record<string, { label: string; cls: string }> = {
+  baru:       { label: 'Baru',       cls: 'bg-rose-100 text-rose-800 border-rose-200' },
+  diproses:   { label: 'Diproses',   cls: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  dikirim:    { label: 'Dikirim',    cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+  selesai:    { label: 'Selesai',    cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  dibatalkan: { label: 'Dibatalkan', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+};
+
+const STATUS_PESAN: Record<string, { label: string; cls: string }> = {
+  baru:   { label: 'Baru',   cls: 'bg-rose-100 text-rose-800' },
+  dibaca: { label: 'Dibaca', cls: 'bg-blue-100 text-blue-800' },
+  selesai:{ label: 'Selesai',cls: 'bg-emerald-100 text-emerald-800' },
+};
+
+// ─── Sub-Component: StatCard (Memoized) ──────────────────────────────────────
+const StatCard = React.memo(({
+  label, value, sub, icon, accent = false
+}: { label: string; value: string | number; sub?: string; icon: React.ReactNode; accent?: boolean }) => (
+  <div className={`rounded-[24px] p-5 border flex items-start justify-between gap-3 shadow-sm transition-all duration-300 ${accent ? 'bg-maroon border-maroon-dark text-white' : 'bg-white border-cream-dark'}`}>
+    <div>
+      <p className={`text-[10px] font-mono font-bold uppercase tracking-widest mb-1.5 ${accent ? 'text-rose-200' : 'text-gray-400'}`}>{label}</p>
+      <p className={`text-2xl font-serif font-extrabold leading-none ${accent ? 'text-white' : 'text-stone-900'}`}>{value}</p>
+      {sub && <p className={`text-[10px] mt-1.5 ${accent ? 'text-rose-200' : 'text-gray-400'}`}>{sub}</p>}
+    </div>
+    <div className={`p-2.5 rounded-xl flex-shrink-0 ${accent ? 'bg-white/20' : 'bg-cream-dark/40'}`}>
+      <div className={accent ? 'text-white' : 'text-maroon'}>{icon}</div>
+    </div>
+  </div>
+));
+StatCard.displayName = 'StatCard';
+
+// ─── Sub-Component: TabBtn ───────────────────────────────────────────────────
+const TabBtn = ({
+  active, onClick, icon, label, badge
+}: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer whitespace-nowrap ${
+      active ? 'bg-maroon text-white shadow-md' : 'text-stone-700 hover:bg-cream-dark/50 hover:text-stone-900'
+    }`}
+  >
+    {icon}
+    <span>{label}</span>
+    {badge !== undefined && badge > 0 && (
+      <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full font-bold ${active ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700'}`}>
+        {badge}
+      </span>
+    )}
+  </button>
+);
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewProps) {
+  const [adminUsername, setAdminUsername] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [authError, setAuthError]         = useState('');
+  const [showPass, setShowPass]           = useState(false);
+
+  type AdminTab = 'overview' | 'products' | 'stock' | 'orders' | 'messages' | 'articles' | 'customers';
+  const [adminTab, setAdminTab] = useState<AdminTab>('overview');
+
+  const [products,  setProducts]  = useState<Product[]>([]);
+  const [inquiries, setInquiries] = useState<any[]>([]);
+  const [orders,    setOrders]    = useState<Order[]>([]);
+  const [articles,  setArticles]  = useState<Article[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [dbSource,  setDbSource]  = useState<'Supabase' | 'LocalStorage'>('LocalStorage');
+
+  // Form States
+  const [editProd,    setEditProd]    = useState<Partial<Product> | null>(null);
+  const [isFormOpen,  setIsFormOpen]  = useState(false);
+  const [formErr,     setFormErr]     = useState('');
+  const [savingProd,  setSavingProd]  = useState(false);
+
+  const [editArt,       setEditArt]       = useState<Partial<Article> | null>(null);
+  const [isArtFormOpen, setIsArtFormOpen] = useState(false);
+  const [artErr,        setArtErr]        = useState('');
+  const [savingArt,     setSavingArt]     = useState(false);
+
+  const [orderFilter, setOrderFilter] = useState<string>('all');
+  const [msgFilter,   setMsgFilter]   = useState<string>('all');
+
+  // ── Data Loader Logic ──────────────────────────────────────────────────────
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const prodList = await dbService.getAllProducts();
-      const inqList = await dbService.getInquiries();
+      const [prodList, inqList, ordList, artList] = await Promise.all([
+        dbService.getAllProducts(),
+        dbService.getInquiries(),
+        dbService.getAllOrders(),
+        dbService.getAllArticles(),
+      ]);
       setProducts(prodList);
       setInquiries(inqList);
-      setDatabaseSource(isSupabaseConfigured ? 'Supabase' : 'LocalStorage');
-      if (onRefresh) {
-        onRefresh();
-      }
+      setOrders(ordList);
+      setArticles(artList);
+      setDbSource(isSupabaseConfigured ? 'Supabase' : 'LocalStorage');
+      if (onRefresh) onRefresh();
     } catch (err) {
-      console.error('Load data admin error:', err);
+      console.error('Data sync execution failed:', err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [onRefresh]);
 
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      loadData();
-    }
-  }, [isAuthenticated]);
+  useEffect(() => {
+    if (isAdmin) loadData();
+  }, [isAdmin, loadData]);
 
-  // Handle credentials authentication
+  // ── Handler Functions ──────────────────────────────────────────────────────
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const isTenunSumba = adminUsername.trim().toLowerCase() === 'tenunsumba' && adminPassword === 'Tenunsumba';
-    const isLegacyAdmin = (adminUsername.trim() === 'admin' && adminPassword === 'admin') || (adminUsername.trim() === 'admin' && adminPassword === '1234') || (adminUsername.trim() === '' && adminPassword === '1234');
+    const userLower = adminUsername.trim().toLowerCase();
+    const passLower = adminPassword.trim().toLowerCase();
     
-    if (isTenunSumba || isLegacyAdmin) {
-      setIsAuthenticated(true);
+    if ((userLower === 'tenunsumba' && passLower === 'tenunsumba') || 
+        (userLower === 'admin' && (adminPassword === 'admin' || adminPassword === '1234'))) {
+      setIsAdmin(true);
       setAuthError('');
     } else {
-      setAuthError('Username atau Password salah!');
+      setAuthError('Username atau password salah!');
     }
   };
 
-  // SQL Script template for copy paste inside the setup hub
-  const supabaseSQL = `-- 1. BUAT TABLE PRODUCTS SECARA OTOMATIS
-CREATE TABLE IF NOT EXISTS public.products (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    category TEXT NOT NULL,
-    price NUMERIC NOT NULL,
-    image TEXT NOT NULL,
-    description TEXT,
-    is_featured BOOLEAN DEFAULT false,
-    code TEXT UNIQUE NOT NULL,
-    dimensions TEXT,
-    weaver TEXT,
-    making_time TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- REFILL DATA PERTAMA KALI UNTUK PRODUCTS
-INSERT INTO public.products (id, title, category, price, image, description, is_featured, code, dimensions, weaver, making_time) 
-VALUES 
-('1', 'Tenun Ikat Sumba Motif Kuda', 'Kain Tenun', 2500000, 'https://images.unsplash.com/photo-1551250936-3190e2108db9?auto=format&fit=crop&w=600&q=80', 'Kain Tenun Ikat Sumba asli dengan motif Kuda Sumba melambangkan keanggunan dan status sosial.', true, 'TIS-KUD0A', '240 x 110 cm', 'Mama Seraphine Weetebula', '6 Bulan')
-ON CONFLICT (id) DO NOTHING;
-
--- 2. BUAT TABLE INQUIRIES
-CREATE TABLE IF NOT EXISTS public.inquiries (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    subject TEXT,
-    message TEXT NOT NULL,
-    product_title TEXT,
-    product_code TEXT,
-    status TEXT DEFAULT 'baru', -- 'baru' | 'dibaca' | 'selesai'
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- AKTIFKAN ROW LEVEL SECURITY (RLS) AGAR AMAN
-ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inquiries ENABLE ROW LEVEL SECURITY;
-
--- BUAT POLICY SUPAYA SEMUA ORANG BISA VIEW & INSERT PESAN
-CREATE POLICY "Public Read Access" ON public.products FOR SELECT USING (true);
-CREATE POLICY "Public Read Access" ON public.inquiries FOR SELECT USING (true);
-CREATE POLICY "Public Insert Access" ON public.inquiries FOR INSERT WITH CHECK (true);
-CREATE POLICY "Full Admin Access" ON public.products FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Full Admin Access" ON public.inquiries FOR ALL USING (true) WITH CHECK (true);
-`;
-
-  const copySQL = () => {
-    navigator.clipboard.writeText(supabaseSQL);
-    setSqlCopied(true);
-    setTimeout(() => setSqlCopied(false), 3000);
-  };
-
-  // Product save submit
-  const handleSaveProduct = async (e: React.FormEvent) => {
+  const handleSaveProd = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFormError('');
-    
-    const p = editingProduct;
-    if (!p?.title || !p?.price || !p?.image || !p?.code) {
-      setFormError('Harap isi semua input wajib (Nama, Harga, Kode, URL Gambar)');
+    setFormErr('');
+    if (!editProd?.title || !editProd?.price || !editProd?.image || !editProd?.code) {
+      setFormErr('Harap isi semua kolom wajib (Nama, Harga, Kode, URL Gambar)');
       return;
     }
-
-    setBtnSaving(true);
+    setSavingProd(true);
     try {
       await dbService.saveProduct({
-        id: p.id,
-        title: p.title,
-        category: p.category || 'Kain Tenun',
-        price: Number(p.price),
-        image: p.image,
-        description: p.description || '',
-        isFeatured: p.isFeatured || false,
-        code: p.code,
-        dimensions: p.dimensions || '',
-        weaver: p.weaver || 'Mama Seraphine',
-        makingTime: p.makingTime || '1 Bulan'
+        id: editProd.id,
+        title: editProd.title!,
+        category: editProd.category || 'Kain Tenun',
+        price: Number(editProd.price),
+        image: editProd.image!,
+        description: editProd.description || '',
+        isFeatured: editProd.isFeatured || false,
+        code: editProd.code!,
+        dimensions: editProd.dimensions || '',
+        weaver: editProd.weaver || 'Penenun Sumba',
+        makingTime: editProd.makingTime || '3 Bulan',
+        stock: editProd.stock !== undefined ? Number(editProd.stock) : 5,
       });
       setIsFormOpen(false);
-      setEditingProduct(null);
-      loadData();
-    } catch (err) {
-      setFormError('Terjadi kesalahan saat menyimpan produk.');
-    } finally {
-      setBtnSaving(false);
+      setEditProd(null);
+      await loadData();
+    } catch { 
+      setFormErr('Terjadi kesalahan saat menyimpan data ke database.'); 
+    } finally { 
+      setSavingProd(false); 
     }
   };
 
-  // Product delete
-  const handleDeleteProduct = async (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus produk ini dari katalog?')) {
-      await dbService.deleteProduct(id);
-      loadData();
+  const handleDeleteProd = async (id: string) => {
+    if (!confirm('Yakin ingin menghapus produk ini dari katalog?')) return;
+    await dbService.deleteProduct(id);
+    await loadData();
+  };
+
+  const handleUpdateStock = async (p: Product, newStock: number) => {
+    const updatedStock = Math.max(0, newStock);
+    await dbService.saveProduct({ ...p, stock: updatedStock });
+    setProducts(prev => prev.map(x => x.id === p.id ? { ...x, stock: updatedStock } : x));
+  };
+
+  const handleUpdateOrderStatus = async (id: string, status: Order['status']) => {
+    await dbService.updateOrderStatus(id, status);
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+  };
+
+  const handleDeleteOrder = async (id: string) => {
+    if (!confirm('Hapus catatan pesanan ini?')) return;
+    await dbService.deleteOrder(id);
+    setOrders(prev => prev.filter(o => o.id !== id));
+  };
+
+  const handleUpdateMsgStatus = async (id: string, status: 'baru' | 'dibaca' | 'selesai') => {
+    await dbService.updateInquiryStatus(id, status);
+    setInquiries(prev => prev.map(m => m.id === id ? { ...m, status } : m));
+  };
+
+  const handleDeleteMsg = async (id: string) => {
+    if (!confirm('Hapus pesan masuk ini?')) return;
+    await dbService.deleteInquiry(id);
+    setInquiries(prev => prev.filter(m => m.id !== id));
+  };
+
+  const handleSaveArt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setArtErr('');
+    if (!editArt?.title || !editArt?.excerpt || !editArt?.content || !editArt?.image) {
+      setArtErr('Harap isi semua kolom wajib (Judul, Ringkasan, Konten, URL Gambar)');
+      return;
+    }
+    setSavingArt(true);
+    try {
+      await dbService.saveArticle({
+        id: editArt.id,
+        title: editArt.title!,
+        slug: editArt.slug || editArt.title!.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        content: editArt.content!,
+        excerpt: editArt.excerpt!,
+        author: editArt.author || 'Admin',
+        image: editArt.image!,
+      });
+      setIsArtFormOpen(false);
+      setEditArt(null);
+      await loadData();
+    } catch { 
+      setArtErr('Terjadi kesalahan saat menyimpan artikel.'); 
+    } finally { 
+      setSavingArt(false); 
     }
   };
 
-  // Inquiry update status
-  const handleUpdateInquiryStatus = async (id: string, stat: 'baru' | 'dibaca' | 'selesai') => {
-    await dbService.updateInquiryStatus(id, stat);
-    loadData();
+  const handleDeleteArt = async (id: string) => {
+    if (!confirm('Hapus artikel ini?')) return;
+    await dbService.deleteArticle(id);
+    setArticles(prev => prev.filter(a => a.id !== id));
   };
 
-  // Inquiry delete
-  const handleDeleteInquiry = async (id: string) => {
-    if (confirm('Hapus pesan pelanggan ini?')) {
-      await dbService.deleteInquiry(id);
-      loadData();
-    }
-  };
+  // ── Memoized Metrics Calculation ───────────────────────────────────────────
+  const metrics = useMemo(() => {
+    const totalValuation = products.reduce((s, p) => s + p.price * (p.stock ?? 5), 0);
+    const completedRevenue = orders.filter(o => o.status === 'selesai').reduce((s, o) => s + o.totalPrice, 0);
+    const activeOrders = orders.filter(o => ['baru', 'diproses', 'dikirim'].includes(o.status)).length;
+    const newMessages = inquiries.filter(m => m.status === 'baru').length;
+    const lowStockProducts = products.filter(p => (p.stock ?? 5) <= 2);
+    
+    return { totalValuation, completedRevenue, activeOrders, newMessages, lowStockProducts };
+  }, [products, orders, inquiries]);
 
-  // Open creation modal tool
-  const openNewProductForm = () => {
-    setEditingProduct({
-      title: '',
-      category: 'Kain Tenun',
-      price: 1500000,
-      image: 'https://images.unsplash.com/photo-1601924994987-69e26d50dc26?auto=format&fit=crop&w=600&q=80',
-      description: '',
-      isFeatured: false,
-      code: 'TIS-NEW' + Math.floor(Math.random() * 900 + 100),
-      dimensions: '200 x 100 cm',
-      weaver: 'Mama Penenun',
-      makingTime: '3 Bulan'
+  const customerDb = useMemo(() => {
+    const registry: Record<string, any> = {};
+    orders.forEach(o => {
+      const key = (o.customerEmail || '').trim().toLowerCase() || (o.customerPhone || '').trim();
+      if (!key) return;
+      if (!registry[key]) {
+        registry[key] = { name: o.customerName, email: o.customerEmail || '-', phone: o.customerPhone || '-', address: o.customerAddress || '-', totalOrders: 0, totalSpend: 0, lastActivity: o.createdAt };
+      }
+      registry[key].totalOrders++;
+      registry[key].totalSpend += o.totalPrice;
+      if (new Date(o.createdAt) > new Date(registry[key].lastActivity)) {
+        registry[key].name = o.customerName;
+        registry[key].address = o.customerAddress;
+        registry[key].lastActivity = o.createdAt;
+      }
     });
-    setFormError('');
-    setIsFormOpen(true);
-  };
+    return Object.values(registry);
+  }, [orders]);
 
-  // Open editing modal tool
-  const openEditProductForm = (p: Product) => {
-    setEditingProduct({ ...p });
-    setFormError('');
-    setIsFormOpen(true);
-  };
+  const filteredOrders = useMemo(() => orderFilter === 'all' ? orders : orders.filter(o => o.status === orderFilter), [orders, orderFilter]);
+  const filteredMessages = useMemo(() => msgFilter === 'all' ? inquiries : inquiries.filter(m => m.status === msgFilter), [inquiries, msgFilter]);
 
-  // Calculate high-fidelity dashboard metrics
-  const totalValuation = products.reduce((sum, p) => sum + p.price, 0);
-  const featuredCount = products.filter((p) => p.isFeatured).length;
-  const newInquiriesCount = inquiries.filter((inq) => inq.status === 'baru').length;
-  const totalWeavers = Array.from(new Set(products.map((p) => p.weaver || 'Seraphine'))).length;
-
-  if (!isAuthenticated) {
+  // ── Render View Condition ──────────────────────────────────────────────────
+  if (!isAdmin) {
     return (
-      <div id="admin-login-screen" className="min-h-screen bg-[#FAF8F5] flex items-center justify-center p-4 pt-24 pb-16">
-        <div className="max-w-md w-full bg-white rounded-2xl border border-brand-cream-dark p-8 shadow-xl text-center flex flex-col items-center">
-          
-          {/* Logo Frame & Sumba pattern icons banner */}
-          <div className="w-16 h-16 bg-[#B01818] rounded-2xl flex items-center justify-center text-white p-2 shadow-md mb-4">
-            <svg viewBox="0 0 100 100" className="w-full h-full fill-current">
-              <path d="M50,5 L95,50 L50,95 L5,50 Z" stroke="currentColor" strokeWidth="5" fill="none" />
-              <path d="M50,15 L85,50 L50,85 L15,50 Z" stroke="currentColor" strokeWidth="4" fill="none" />
-              <rect x="42" y="42" width="16" height="16" transform="rotate(45 50 50)" />
-              <line x1="15" y1="50" x2="85" y2="50" stroke="currentColor" strokeWidth="4" />
-              <line x1="50" y1="15" x2="50" y2="85" stroke="currentColor" strokeWidth="4" />
-            </svg>
-          </div>
-
-          <h3 className="font-serif text-2xl font-bold text-brand-brown-dark">
-            Portal Admin Balai Tenun
-          </h3>
-          <p className="text-xs text-brand-gold font-mono uppercase tracking-widest mt-1 mb-6">
-            CD Seraphine Weetebula
-          </p>
-
-          <div className="bg-[#FAF6F2] py-3.5 px-4 rounded-lg border border-brand-cream-dark text-xs text-gray-600 text-left mb-6 w-full">
-            <div className="flex gap-2 items-start text-[#B01818] font-bold mb-1">
-              <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>Verifikasi Akses Admin</span>
+      <div className="min-h-screen bg-stone-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-8 shadow-2xl text-white animate-fade-in">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-maroon rounded-2xl flex items-center justify-center shadow-lg mb-4">
+              <Lock className="w-7 h-7 text-white" />
             </div>
-            Masukkan username dan password administrator untuk mengelola status database Supabase, mengubah katalog tenun, dan membaca pesan masuk.
+            <h2 className="font-serif text-2xl font-bold">Portal Admin Workspace</h2>
+            <p className="text-xs text-brand-gold-light font-mono uppercase tracking-widest mt-1">CD Seraphine Weetebula</p>
           </div>
 
-          <form onSubmit={handleLogin} className="w-full space-y-4">
-            
+          <form onSubmit={handleLogin} className="space-y-4">
             {authError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-600 flex items-center gap-2">
+              <div className="p-3 bg-red-500/20 border border-red-400/30 rounded-xl text-xs font-semibold text-red-300 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{authError}</span>
+                {authError}
               </div>
             )}
-
-            <div className="text-left">
-              <label htmlFor="admin-username-input" className="block text-xs font-mono font-bold uppercase text-gray-405 mb-1">
-                Username Admin
-              </label>
-              <input 
-                type="text"
-                required
-                id="admin-username-input"
-                placeholder="Masukkan Username"
-                value={adminUsername}
-                onChange={(e) => setAdminUsername(e.target.value)}
-                className="w-full px-4 py-2.5 text-sm bg-[#FAF6F2] border border-brand-cream-dark rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-gold focus:bg-white transition-all text-brand-brown-dark font-medium"
-              />
+            <div>
+              <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-white/50 mb-2">Username</label>
+              <input type="text" required placeholder="Username" value={adminUsername} onChange={e => setAdminUsername(e.target.value)} className="w-full px-4 py-3 text-sm bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-gold" />
             </div>
-
-            <div className="text-left">
-              <label htmlFor="admin-password-input" className="block text-xs font-mono font-bold uppercase text-gray-450 mb-1">
-                Password Admin
-              </label>
-              <input 
-                type="password"
-                required
-                id="admin-password-input"
-                placeholder="Masukkan Password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                className="w-full px-4 py-2.5 text-sm bg-[#FAF6F2] border border-brand-cream-dark rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-gold focus:bg-white transition-all text-brand-brown-dark font-medium"
-              />
+            <div>
+              <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-white/50 mb-2">Password</label>
+              <div className="relative">
+                <input type={showPass ? 'text' : 'password'} required placeholder="Password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full px-4 py-3 text-sm bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-gold pr-12" />
+                <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70">
+                  <Eye className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 bg-[#B01818] hover:bg-[#8E1212] text-white font-sans text-xs font-bold tracking-widest uppercase rounded-xl shadow-md transition-colors cursor-pointer"
-            >
+            <button type="submit" className="w-full py-3 bg-maroon hover:bg-maroon-dark text-white font-bold text-sm tracking-widest uppercase rounded-xl shadow-lg transition-all cursor-pointer">
               Masuk Dashboard
             </button>
-
-            <span className="block text-[10px] text-gray-400">
-              *Petunjuk Pengujian: Gunakan <strong className="text-stone-700">Tenunsumba</strong> / <strong className="text-stone-705">Tenunsumba</strong>
-            </span>
-
           </form>
-
         </div>
       </div>
     );
   }
 
   return (
-    <div id="admin-workspace" className="min-h-screen bg-[#FCFAF7] pt-24 pb-16 animate-fade-in">
+    <div id="admin-workspace" className="min-h-screen bg-brand-cream pt-10 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* ================= HEADER BRAND BAR ================= */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-brand-cream-dark shadow-sm mb-8">
-          
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-brand-brown-dark rounded-xl flex items-center justify-center text-brand-gold p-1.5 shadow">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-serif text-lg font-bold text-brand-brown-dark leading-none">
-                  Admin Workplace
-                </h2>
-                {databaseSource === 'Supabase' ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                    Supabase Live
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
-                    <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
-                    Sandbox Local
-                  </span>
-                )}
+        {/* Top Header Control */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-9 h-9 bg-maroon rounded-xl flex items-center justify-center shadow">
+                <Database className="w-4.5 h-4.5 text-white" />
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Panel integrasi data ikat tenun CD Seraphine Sumba
-              </p>
+              <h1 className="font-serif text-2xl font-bold text-stone-900">Workspace Control Panel</h1>
+              <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border ${dbSource === 'Supabase' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${dbSource === 'Supabase' ? 'bg-emerald-500 animate-ping-sm' : 'bg-amber-400'}`} />
+                {dbSource === 'Supabase' ? 'Supabase Sync Engine' : 'Offline Local Storage'}
+              </span>
             </div>
           </div>
-
-          {/* Tab Navigation buttons */}
-          <div className="flex flex-wrap items-center gap-1 bg-[#FAF6F2] p-1 rounded-xl border border-brand-cream-dark">
-            <button
-              id="admin-tab-overview"
-              onClick={() => setAdminTab('overview')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${adminTab === 'overview' ? 'bg-[#B01818] text-white shadow-xs' : 'text-gray-600 hover:text-brand-brown'}`}
-            >
-              Ringkasan
+          <div className="flex items-center gap-2">
+            <button onClick={loadData} disabled={isLoading} className="p-2.5 bg-white border border-cream-dark rounded-xl text-gray-500 hover:text-maroon transition-all shadow-sm">
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
-            <button
-              id="admin-tab-products"
-              onClick={() => setAdminTab('products')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${adminTab === 'products' ? 'bg-[#B01818] text-white shadow-xs' : 'text-gray-600 hover:text-brand-brown'}`}
-            >
-              Katalog Tenun ({products.length})
+            <button onClick={() => setIsAdmin(false)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-cream-dark rounded-xl text-xs font-bold text-gray-600 hover:text-red-700 transition-all shadow-sm">
+              <LogOut className="w-3.5 h-3.5" /> Keluar Sesi
             </button>
-            <button
-              id="admin-tab-inquiries"
-              onClick={() => setAdminTab('inquiries')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${adminTab === 'inquiries' ? 'bg-[#B01818] text-white shadow-xs' : 'text-gray-600 hover:text-brand-brown'}`}
-            >
-              Pesan Masuk ({newInquiriesCount} Baru)
-            </button>
-
           </div>
-
-          {/* Lock Action */}
-          <button 
-            onClick={() => setIsAuthenticated(false)}
-            className="px-3.5 py-1.5 text-xs bg-gray-150 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl self-end md:self-auto flex items-center gap-1.5"
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>Kunci Panel</span>
-          </button>
-
         </div>
 
-        {/* ================= TAB CONTENT Area ================= */}
+        {/* Tab Selection Navigation */}
+        <div className="flex flex-wrap gap-1.5 bg-white border border-cream-dark p-2 rounded-2xl shadow-sm mb-8">
+          <TabBtn active={adminTab==='overview'}  onClick={()=>setAdminTab('overview')}  icon={<BarChart3 className="w-4 h-4"/>}     label="Ringkasan Performa" />
+          <TabBtn active={adminTab==='products'}  onClick={()=>setAdminTab('products')}  icon={<Package className="w-4 h-4"/>}       label="Katalog Tenun"  badge={products.length} />
+          <TabBtn active={adminTab==='stock'}     onClick={()=>setAdminTab('stock')}     icon={<Layers className="w-4 h-4"/>}        label="Manajemen Stok" />
+          <TabBtn active={adminTab==='orders'}    onClick={()=>setAdminTab('orders')}    icon={<ShoppingCart className="w-4 h-4"/>}  label="Manajemen Pesanan" badge={metrics.activeOrders} />
+          <TabBtn active={adminTab==='messages'}  onClick={()=>setAdminTab('messages')}  icon={<MessageSquare className="w-4 h-4"/>} label="Konsultasi Masuk" badge={metrics.newMessages} />
+          <TabBtn active={adminTab==='articles'}  onClick={()=>setAdminTab('articles')}  icon={<BookOpen className="w-4 h-4"/>}      label="Konten Edukasi" badge={articles.length} />
+          <TabBtn active={adminTab==='customers'} onClick={()=>setAdminTab('customers')} icon={<Users className="w-4 h-4"/>}        label="Database CRM" badge={customerDb.length} />
+        </div>
 
-        {/* A. OVERVIEW MODULE */}
+        {/* ── Tab Layout Render Content (Bento Grid) ───────────────────────── */}
         {adminTab === 'overview' && (
-          <div className="space-y-8 animate-fade-in">
+          <div className="space-y-6 animate-fade-in">
             
-            {/* Supabase status warning ribbon if sandbox is active */}
-            {databaseSource === 'LocalStorage' && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-amber-900 leading-normal text-xs sm:text-sm shadow-inner">
-                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-bold flex items-center gap-1.5">
-                    Modul Database Supabase Belum Terkoneksi
-                  </h4>
-                  <p className="text-amber-700 text-xs mt-1">
-                    Saat ini Anda sedang menggunakan <strong>Sanbox Local Mock Storage</strong>. Data yang Anda tambahkan, ubah, atau hapus hanya tersimpan di browser Anda. Klik tab <strong>"Supabase SQL"</strong> untuk melihat tutorial setup cepat & mengunggah kode tabel dalam 2 menit!
-                  </p>
-                </div>
+            {/* TIER 1: METRIK BENTO (Highlight Data Finansial) */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6">
+              <div className="md:col-span-2">
+                <StatCard 
+                  accent 
+                  label="Total Valuasi Stok" 
+                  value={formatPrice(metrics.totalValuation)} 
+                  sub="Total kapitalisasi aset katalog saat ini" 
+                  icon={<DollarSign className="w-6 h-6"/>} 
+                />
               </div>
-            )}
-
-            {/* STATS DECOR WIDGETS BENTO GRID */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              
-              <div className="bg-white p-5 rounded-2xl border border-brand-cream-dark shadow-sm flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-gray-405 font-mono font-bold uppercase block">Katalog Produk</span>
-                  <p className="text-3xl font-serif font-extrabold text-brand-brown-dark mt-1">{products.length}</p>
-                  <span className="text-[10px] text-emerald-600 font-bold block mt-1">✓ {featuredCount} Unggulan</span>
-                </div>
-                <div className="w-10 h-10 bg-brand-cream-dark rounded-xl flex items-center justify-center text-[#B01818]">
-                  <Package className="w-5 h-5" />
-                </div>
+              <div className="md:col-span-1">
+                <StatCard 
+                  label="Pendapatan Sukses" 
+                  value={formatPrice(metrics.completedRevenue)} 
+                  sub="Dari transaksi selesai" 
+                  icon={<TrendingUp className="w-5 h-5"/>} 
+                />
               </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-brand-cream-dark shadow-sm flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-gray-405 font-mono font-bold uppercase block">Pesan Masuk Baru</span>
-                  <p className="text-3xl font-serif font-extrabold text-[#B01818] mt-1">{newInquiriesCount}</p>
-                  <span className="text-[10px] text-gray-400 font-medium block mt-1">total {inquiries.length} pesan</span>
-                </div>
-                <div className="w-10 h-10 bg-brand-cream-dark rounded-xl flex items-center justify-center text-[#B01818]">
-                  <Inbox className="w-5 h-5" />
-                </div>
+              <div className="md:col-span-1">
+                <StatCard 
+                  label="Pesanan Aktif" 
+                  value={metrics.activeOrders} 
+                  sub={`${orders.length} total manifest`} 
+                  icon={<ShoppingCart className="w-5 h-5"/>} 
+                />
               </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-brand-cream-dark shadow-sm flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-gray-405 font-mono font-bold uppercase block">Jumlah Penenun</span>
-                  <p className="text-3xl font-serif font-extrabold text-brand-brown-dark mt-1">{totalWeavers}</p>
-                  <span className="text-[10px] text-[#B01818] font-bold block mt-1">Perempuan Sumba Barat</span>
-                </div>
-                <div className="w-10 h-10 bg-brand-cream-dark rounded-xl flex items-center justify-center text-[#B01818]">
-                  <User className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-brand-cream-dark shadow-sm flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-gray-405 font-mono font-bold uppercase block">Estimasi Valuasi</span>
-                  <p className="text-xl sm:text-2xl font-sans font-extrabold text-[#B01818] mt-2">
-                    Rp {totalValuation.toLocaleString('id-ID')}
-                  </p>
-                  <span className="text-[10px] text-gray-400 font-medium block mt-1">nilai aset aktif</span>
-                </div>
-                <div className="w-10 h-10 bg-brand-cream-dark rounded-xl flex items-center justify-center text-[#B01818]">
-                  <TrendingUp className="w-5 h-5" />
-                </div>
-              </div>
-
             </div>
 
-            {/* RETROSPECTIVE ACTIVITY BLOCK */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* TIER 2: PANEL BENTO UTAMA (Operasional) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
-              {/* Left Box: Recent Inquiries */}
-              <div className="bg-white rounded-2xl border border-brand-cream-dark p-6 shadow-sm col-span-1 lg:col-span-7 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-serif text-md font-bold text-stone-800">Pesan Pelanggan Terbaru</h3>
-                  <button onClick={() => setAdminTab('inquiries')} className="text-xs text-brand-brown hover:underline font-bold">Semua</button>
+              {/* Kolom Kiri: Panel Restock (Span 1) */}
+              <div className="bg-white rounded-[24px] border border-cream-dark p-6 shadow-sm flex flex-col h-[420px]">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-serif font-bold text-stone-900 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-maroon" /> Restock Alert
+                  </h3>
+                  <span className="text-[10px] font-bold bg-rose-100 text-maroon px-2.5 py-1 rounded-full">
+                    {metrics.lowStockProducts.length} Kritis
+                  </span>
                 </div>
-
-                <div className="divide-y divide-gray-100">
-                  {inquiries.slice(0, 3).map((inq, i) => (
-                    <div key={inq.id || i} className="py-3 first:pt-0 last:pb-0 flex justify-between gap-3 text-xs">
-                      <div>
-                        <div className="flex items-center gap-1.5 font-bold text-stone-700">
-                          <span>{inq.name}</span>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${inq.status === 'baru' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                            {inq.status}
-                          </span>
-                        </div>
-                        <p className="text-[#8B847C] font-mono mt-0.5 truncate max-w-xs">{inq.email}</p>
-                        <p className="text-gray-600 mt-1 italic line-clamp-1">"{inq.message}"</p>
-                      </div>
-                      <span className="text-gray-400 font-mono text-[10px] text-right">
-                        {new Date(inq.created_at).toLocaleDateString('id-ID')}
-                      </span>
+                
+                <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                  {metrics.lowStockProducts.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-2">
+                      <Package className="w-10 h-10 opacity-20" />
+                      <p className="text-xs font-mono uppercase tracking-widest text-center mt-2">Kuantitas Stok<br/>Terjaga Aman</p>
                     </div>
-                  ))}
-
-                  {inquiries.length === 0 && (
-                    <div className="text-center py-6 text-xs text-gray-400">Belum ada pesan masuk.</div>
+                  ) : (
+                    metrics.lowStockProducts.map(p => (
+                      <div key={p.id} className="flex items-center gap-3 p-3 bg-brand-cream/50 rounded-2xl border border-cream-dark hover:border-maroon/30 transition-colors">
+                        <img src={p.image} className="w-12 h-14 object-cover rounded-xl border border-cream-dark flex-shrink-0" alt="" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-serif font-bold text-sm text-stone-900 truncate">{p.title}</p>
+                          <p className="text-[10px] text-gray-500 font-mono mt-0.5">{p.code}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                          <span className="font-mono font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md text-[10px]">
+                            Stok: {p.stock ?? 5}
+                          </span>
+                          <button onClick={() => handleUpdateStock(p, (p.stock ?? 5) + 5)} className="px-2.5 py-1 bg-white border border-cream-dark hover:bg-emerald-50 hover:border-emerald-200 text-emerald-700 rounded-lg text-[10px] font-bold transition-all shadow-sm">
+                            +5 Unit
+                          </button>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
 
-              {/* Right Box: Sumba Traditional Craft Stewardship Tips */}
-              <div className="bg-[#FAF6F2] rounded-2xl border border-brand-cream-dark p-6 col-span-1 lg:col-span-5 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-serif text-md font-bold text-[#8E1212] mb-2 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-brand-gold" />
-                    Pelestarian Warisan
+              {/* Kolom Kanan: Panel Transaksi (Span 2) */}
+              <div className="lg:col-span-2 bg-white rounded-[24px] border border-cream-dark p-6 shadow-sm flex flex-col h-[420px]">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-serif font-bold text-stone-900 flex items-center gap-2">
+                    <Database className="w-5 h-5 text-maroon" /> Antrean Order Terbaru
                   </h3>
-                  <p className="text-xs text-stone-605 leading-relaxed">
-                    Setiap kain merupakan representasi dari kosmologi peninggalan leluhur Marapu. Saat merilis produk baru:
-                  </p>
-                  <ul className="text-[11px] text-stone-500 mt-2 space-y-1.5">
-                    <li>• Cantumkan <strong>nama perajin (Mama)</strong> yang memilin benang & mengikat pola.</li>
-                    <li>• Sebutkan <strong>durasi pembuatannya</strong> (contoh: 4 Bulan atau 8 Bulan) untuk mengedukasi pembeli mengapa nilai seninya sangat tinggi.</li>
-                    <li>• Pastikan format kode konsisten agar mudah diklasifikasi.</li>
-                  </ul>
+                  {orders.length > 0 && (
+                    <button onClick={() => setAdminTab('orders')} className="text-[10px] font-bold text-maroon hover:text-maroon-dark transition-colors font-mono uppercase tracking-wider bg-maroon/5 hover:bg-maroon/10 px-3 py-1.5 rounded-lg">
+                      Lihat Manifest &rarr;
+                    </button>
+                  )}
                 </div>
                 
-                <div className="pt-4 border-t border-brand-cream-dark/50 mt-4 flex items-center justify-between text-xs">
-                  <span className="text-[10px] text-[#A69784] font-medium font-mono uppercase">CD Seraphine SBDNTT</span>
-                  <div className="flex gap-1 text-red-500">
-                    <Heart className="w-3.5 h-3.5 fill-current" />
-                  </div>
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                  {orders.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-3">
+                      <ShoppingCart className="w-12 h-12 opacity-20" />
+                      <p className="text-xs font-mono uppercase tracking-widest mt-2">Belum ada transaksi terekam</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {orders.slice(0, 6).map(o => {
+                        const statusConfig = STATUS_PESANAN[o.status] || STATUS_PESANAN.baru;
+                        return (
+                          <div key={o.id} className="p-4 rounded-2xl border border-cream-dark bg-brand-cream/30 hover:bg-white hover:shadow-sm transition-all group">
+                            <div className="flex justify-between items-start mb-3">
+                              <span className={`inline-flex text-[9px] font-bold font-mono px-2 py-1 rounded-md border ${statusConfig.cls}`}>
+                                {statusConfig.label}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-mono">{formatDate(o.createdAt)}</span>
+                            </div>
+                            <p className="font-bold text-sm text-stone-900 truncate" title={o.customerName}>{o.customerName}</p>
+                            <div className="flex justify-between items-end mt-2 pt-2 border-t border-cream-dark/50">
+                                <p className="text-[11px] text-gray-500 font-mono truncate max-w-[120px]" title={o.productTitle}>
+                                  {o.productCode} &times; {o.quantity}
+                                </p>
+                                <p className="text-sm font-bold text-maroon">{formatPrice(o.totalPrice)}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-
+              
             </div>
-
           </div>
         )}
 
-        {/* B. DETAILED CATALOG MANAGER */}
+        {/* Render Tab Konten Katalog */}
         {adminTab === 'products' && (
-          <div className="space-y-6 animate-fade-in">
-            
-            {/* Action Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-brand-cream-dark shadow-sm">
-              <div className="text-sm text-gray-600 font-sans font-medium">
-                Katalog Produk Aktif: <span className="font-bold text-brand-brown-dark">{products.length} item</span>
-              </div>
-              <button
-                onClick={openNewProductForm}
-                className="px-4 py-2 bg-[#B01818] hover:bg-[#8E1212] text-white text-xs font-bold tracking-wide uppercase rounded-lg shadow-sm flex items-center justify-center gap-2 self-start sm:self-auto"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Tambah Produk</span>
+          <div className="space-y-5 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-cream-dark shadow-sm">
+              <p className="text-sm text-stone-700 font-medium">Registrasi Entri Katalog: <span className="font-bold text-maroon">{products.length} produk</span></p>
+              <button onClick={() => { setEditProd({ title:'', category:'Kain Tenun', price:1500000, image:'https://images.unsplash.com/photo-1601924994987-69e26d50dc26?auto=format&fit=crop&w=600&q=80', description:'', isFeatured:false, code:'TIS-NEW'+Math.floor(Math.random()*900+100), dimensions:'200 x 100 cm', weaver:'Mama Penenun', makingTime:'3 Bulan', stock:5 }); setFormErr(''); setIsFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+                <Plus className="w-4 h-4" /> Tambah Entri Kain
               </button>
             </div>
 
-            {/* List Table wrapper of products */}
-            <div className="bg-white rounded-2xl border border-brand-cream-dark shadow-sm overflow-hidden overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[750px]">
-                <thead>
-                  <tr className="bg-brand-cream/50 text-xs text-brand-brown font-mono font-bold uppercase tracking-wider border-b border-brand-cream-dark">
-                    <th className="p-4 w-28 text-center">Gambar</th>
-                    <th className="p-4">Kombu / Detail Karya</th>
-                    <th className="p-4 w-32">Kategori</th>
-                    <th className="p-4 w-36">Harga</th>
-                    <th className="p-4 w-32">Aset Code</th>
-                    <th className="p-4 w-24">Penenun</th>
-                    <th className="p-4 w-28 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-xs sm:text-sm text-stone-700">
-                  {products.map((p) => (
-                    <tr key={p.id} className="hover:bg-brand-cream/10 transition-colors">
-                      <td className="p-4">
-                        <div className="w-16 h-20 rounded-md overflow-hidden bg-gray-100 border border-brand-cream">
-                          <img 
-                            src={p.image} 
-                            alt={p.title} 
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div>
-                          <h4 className="font-serif font-bold text-brand-brown-dark -mb-0.5">{p.title}</h4>
-                          <span className="text-[10px] text-gray-400 font-serif block">
-                            Durasi: {p.makingTime} • Dimensi: {p.dimensions || '-'}
-                          </span>
-                          {p.isFeatured && (
-                            <span className="inline-block mt-1 text-[9px] bg-amber-100 text-[#763e18] font-bold px-1.5 py-0.2 rounded font-sans uppercase">
-                              ★ Featured
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="px-2 py-1 text-[10px] font-mono font-bold text-[#B01818] bg-[#FFF5F5] rounded border">
-                          {p.category}
-                        </span>
-                      </td>
-                      <td className="p-4 font-bold text-[#B01818]">
-                        Rp {p.price.toLocaleString('id-ID')}
-                      </td>
-                      <td className="p-4 font-mono font-bold text-gray-500">
-                        {p.code}
-                      </td>
-                      <td className="p-4 font-medium text-stone-600 max-w-[120px] truncate">
-                        {p.weaver}
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => openEditProductForm(p)}
-                            className="p-1.5 bg-gray-100 hover:bg-brand-gold/25 text-gray-700 hover:text-[#763e18] rounded-md"
-                            title="Edit"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProduct(p.id)}
-                            className="p-1.5 bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-600 rounded-md"
-                            title="Hapus"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
+            <div className="bg-white rounded-2xl border border-cream-dark shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[900px]">
+                  <thead>
+                    <tr className="bg-brand-cream text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-cream-dark">
+                      <th className="p-4 text-center w-24">Visual</th>
+                      <th className="p-4">Karya Tenun</th>
+                      <th className="p-4 w-28">Kategori</th>
+                      <th className="p-4 w-32">Harga Satuan</th>
+                      <th className="p-4 w-20 text-center">Stok</th>
+                      <th className="p-4 w-28">Kode SKU</th>
+                      <th className="p-4 w-32">Penenun</th>
+                      <th className="p-4 w-24 text-right">Aksi</th>
                     </tr>
-                  ))}
-
-                  {products.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="text-center py-10 text-gray-400">
-                        Memuat data katalog produk atau kosong...
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-cream-dark/40">
+                    {products.length === 0 ? (
+                      <tr><td colSpan={8} className="py-16 text-center text-gray-400 text-sm">Arsip kosong. Sila entri kain pertama.</td></tr>
+                    ) : products.map(p => (
+                      <tr key={p.id} className="hover:bg-brand-cream/30 transition-colors">
+                        <td className="p-4">
+                          <div className="w-14 h-18 mx-auto rounded-lg overflow-hidden border border-cream-dark">
+                            <img src={p.image} className="w-full h-full object-cover" alt="" />
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <p className="font-serif font-bold text-stone-900 text-sm leading-tight">{p.title}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">{p.dimensions || '—'} • {p.makingTime}</p>
+                          {p.isFeatured && <span className="inline-flex items-center gap-0.5 text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded mt-1"><Star className="w-2.5 h-2.5"/>Featured</span>}
+                        </td>
+                        <td className="p-4"><span className="px-2 py-0.5 text-[10px] font-mono font-bold text-maroon bg-rose-50 border border-rose-200 rounded">{p.category}</span></td>
+                        <td className="p-4 font-bold text-maroon text-sm">{formatPrice(p.price)}</td>
+                        <td className="p-4 text-center">
+                          <span className={`px-2 py-1 rounded-lg font-mono font-bold text-xs ${p.stock === 0 ? 'bg-red-100 text-red-800' : (p.stock ?? 5) <= 2 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{p.stock ?? 5}</span>
+                        </td>
+                        <td className="p-4 font-mono font-bold text-gray-500 text-xs">{p.code}</td>
+                        <td className="p-4 text-stone-700 text-xs truncate max-w-[110px]">{p.weaver}</td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => { setEditProd({...p}); setFormErr(''); setIsFormOpen(true); }} className="p-1.5 bg-gray-100 text-gray-600 hover:text-stone-900 rounded-lg"><Edit className="w-3.5 h-3.5"/></button>
+                            <button onClick={() => handleDeleteProd(p.id)} className="p-1.5 bg-gray-100 text-gray-600 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-
           </div>
         )}
 
-        {/* C. INQUIRIES CUSTOMER MESSAGES */}
-        {adminTab === 'inquiries' && (
-          <div className="space-y-6 animate-fade-in">
-            
-            <div className="bg-white p-4 rounded-xl border border-brand-cream-dark shadow-sm text-sm text-gray-650 flex justify-between items-center">
-              <span>Total Pesan Konsultasi Masuk: <strong className="text-brand-brown-dark">{inquiries.length} pesan</strong></span>
-              <span className="text-xs text-gray-400 font-mono font-bold">Inquiry System CRM</span>
+        {/* Render Tab Konten Penyesuaian Stok Cepat */}
+        {adminTab === 'stock' && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="bg-white rounded-2xl border border-cream-dark shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead>
+                    <tr className="bg-brand-cream text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-cream-dark">
+                      <th className="p-4 w-16">Foto</th>
+                      <th className="p-4">Produk</th>
+                      <th className="p-4 w-28">SKU</th>
+                      <th className="p-4 w-28">Kategori</th>
+                      <th className="p-4 w-40 text-center">Kuantitas Terkini</th>
+                      <th className="p-4 w-52 text-right">Aksi Cepat</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cream-dark/40">
+                    {products.map(p => (
+                      <tr key={p.id} className="hover:bg-brand-cream/30 transition-colors">
+                        <td className="p-4"><img src={p.image} className="w-10 h-12 object-cover rounded-lg border border-cream-dark" alt=""/></td>
+                        <td className="p-4">
+                          <p className="font-serif font-bold text-stone-900 text-sm">{p.title}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">Penenun: {p.weaver}</p>
+                        </td>
+                        <td className="p-4 font-mono font-bold text-gray-500 text-xs">{p.code}</td>
+                        <td className="p-4"><span className="px-2 py-0.5 text-[10px] font-mono font-bold text-maroon bg-rose-50 border border-rose-100 rounded">{p.category}</span></td>
+                        <td className="p-4">
+                          <div className="flex items-center justify-center">
+                            <input type="number" min={0} value={p.stock ?? 5} onChange={e => handleUpdateStock(p, Number(e.target.value))} className="w-20 px-3 py-1.5 text-center font-mono font-bold text-sm border border-cream-dark rounded-lg focus:outline-none" />
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => handleUpdateStock(p, (p.stock ?? 5) - 1)} className="px-2.5 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-bold">−1</button>
+                            <button onClick={() => handleUpdateStock(p, (p.stock ?? 5) + 1)} className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">+1</button>
+                            <button onClick={() => handleUpdateStock(p, (p.stock ?? 5) + 5)} className="px-2.5 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold">+5</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Konten Manifest Order Pelanggan */}
+        {adminTab === 'orders' && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="bg-white rounded-2xl border border-cream-dark shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[1000px]">
+                  <thead>
+                    <tr className="bg-brand-cream text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-cream-dark">
+                      <th className="p-4">Pelanggan</th>
+                      <th className="p-4">Item Komoditas</th>
+                      <th className="p-4 w-32">Total Pricing</th>
+                      <th className="p-4 w-32">Timestamp</th>
+                      <th className="p-4 w-36">Status Kerja</th>
+                      <th className="p-4 w-16 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cream-dark/40">
+                    {filteredOrders.map(o => {
+                      const statusConfig = STATUS_PESANAN[o.status] || STATUS_PESANAN.baru;
+                      return (
+                        <tr key={o.id} className="hover:bg-brand-cream/30 transition-colors">
+                          <td className="p-4">
+                            <p className="font-bold text-sm text-stone-900">{o.customerName}</p>
+                            <p className="text-[10px] text-gray-500 font-mono">{o.customerEmail}</p>
+                            <a href={`https://wa.me/${o.customerPhone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-700 hover:underline font-mono flex items-center gap-1 mt-0.5">
+                              <Phone className="w-2.5 h-2.5"/>{o.customerPhone}
+                            </a>
+                          </td>
+                          <td className="p-4">
+                            <p className="font-serif font-bold text-sm text-stone-900">{o.productTitle}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">{o.productCode} • {o.quantity} pcs</p>
+                          </td>
+                          <td className="p-4 font-mono font-bold text-maroon text-sm">{formatPrice(o.totalPrice)}</td>
+                          <td className="p-4 text-[11px] text-gray-400 font-mono">{formatDateTime(o.createdAt)}</td>
+                          <td className="p-4">
+                            <select value={o.status} onChange={e => handleUpdateOrderStatus(o.id, e.target.value as Order['status'])} className={`w-full px-2 py-1.5 text-xs font-bold rounded-lg border focus:outline-none cursor-pointer ${statusConfig.cls}`}>
+                              {Object.entries(STATUS_PESANAN).map(([v,st]) => <option key={v} value={v}>{st.label}</option>)}
+                            </select>
+                          </td>
+                          <td className="p-4 text-right">
+                            <button onClick={() => handleDeleteOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Konten Konsultasi Masuk */}
+        {adminTab === 'messages' && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="grid grid-cols-1 gap-4">
+              {filteredMessages.map(m => {
+                const messageStatus = STATUS_PESAN[m.status] || STATUS_PESAN.baru;
+                return (
+                  <div key={m.id} className={`bg-white rounded-2xl border shadow-sm p-5 space-y-3 ${m.status === 'baru' ? 'border-rose-200 bg-rose-50/20' : 'border-cream-dark'}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-brand-cream rounded-xl flex items-center justify-center flex-shrink-0">
+                          <Mail className="w-4.5 h-4.5 text-maroon" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm text-stone-900">{m.name}</p>
+                          <p className="text-xs text-gray-400 font-mono">{m.email}</p>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${messageStatus.cls}`}>{messageStatus.label}</span>
+                    </div>
+                    <p className="text-sm text-stone-700 bg-brand-cream/40 rounded-xl p-3 italic">"{m.message}"</p>
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-2">
+                        {['baru','dibaca','selesai'].map(st => (
+                          <button key={st} onClick={() => handleUpdateMsgStatus(m.id, st as any)} className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border ${m.status === st ? 'bg-stone-200 border-stone-400' : 'bg-white text-gray-500'}`}>{st}</button>
+                        ))}
+                      </div>
+                      <button onClick={() => handleDeleteMsg(m.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Tab Konten Manajemen Artikel Edukasi */}
+        {adminTab === 'articles' && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-cream-dark shadow-sm">
+              <p className="text-sm text-stone-700 font-medium">Koleksi Artikel Budaya: <strong className="text-maroon">{articles.length} entri</strong></p>
+              <button onClick={() => { setEditArt({ title:'', excerpt:'', content:'', image:'https://images.unsplash.com/photo-1596178065887-1198b6148b2b?auto=format&fit=crop&w=600&q=80', author:'Admin Seraphine', slug:'' }); setArtErr(''); setIsArtFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase rounded-xl shadow flex items-center gap-2 cursor-pointer">
+                <Plus className="w-4 h-4"/> Rilis Artikel Baru
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              {inquiries.map((inq, idx) => (
-                <div 
-                  key={inq.id || idx} 
-                  className={`bg-white rounded-2xl p-6 border ${inq.status === 'baru' ? 'border-brand-gold' : 'border-brand-cream-dark'} shadow-sm space-y-4 relative`}
-                >
-                  {/* Status Indicator Bar */}
-                  <div className="absolute top-0 inset-x-0 h-1.5 rounded-t-2.5xl pointer-events-none" style={{
-                    backgroundColor: inq.status === 'baru' ? '#D4702E' : inq.status === 'dibaca' ? '#8E1212' : '#d1c7bd'
-                  }} />
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-serif text-lg font-bold text-brand-brown-dark">{inq.name}</h4>
-                        <span className={`text-[10px] font-mono font-bold uppercase py-0.5 px-2 rounded-full ${
-                          inq.status === 'baru' 
-                            ? 'bg-rose-100 text-rose-800' 
-                            : inq.status === 'dibaca' 
-                            ? 'bg-indigo-100 text-indigo-805' 
-                            : 'bg-emerald-100 text-emerald-805'
-                        }`}>
-                          {inq.status}
-                        </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {articles.map(art => (
+                <div key={art.id} className="bg-white rounded-2xl border border-cream-dark shadow-sm overflow-hidden hover:shadow-md">
+                  <img src={art.image} className="w-full h-40 object-cover" alt="" />
+                  <div className="p-4">
+                    <p className="font-serif font-bold text-stone-900 text-base leading-tight mb-1">{art.title}</p>
+                    <p className="text-xs text-gray-500 line-clamp-2 mb-3">{art.excerpt}</p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-mono font-bold text-brand-gold uppercase">{art.author}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">{formatDate(art.createdAt)}</p>
                       </div>
-                      <p className="text-xs text-gray-500 font-mono mt-0.5">
-                        Email: <a href={`mailto:${inq.email}`} className="text-blue-700 hover:underline">{inq.email}</a> • Terkirim: {new Date(inq.created_at).toLocaleString('id-ID')}
-                      </p>
-                    </div>
-
-                    {/* Status modify buttons */}
-                    <div className="flex items-center gap-1.5 self-start sm:self-auto">
-                      <span className="text-[10px] font-mono text-gray-400 font-bold uppercase mr-1">Tandai:</span>
-                      
-                      <button
-                        onClick={() => handleUpdateInquiryStatus(inq.id, 'baru')}
-                        className={`px-2 py-1 text-[10px] rounded font-semibold ${inq.status === 'baru' ? 'bg-rose-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                      >
-                        Baru
-                      </button>
-
-                      <button
-                        onClick={() => handleUpdateInquiryStatus(inq.id, 'dibaca')}
-                        className={`px-2 py-1 text-[10px] rounded font-semibold ${inq.status === 'dibaca' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                      >
-                        Dibaca
-                      </button>
-
-                      <button
-                        onClick={() => handleUpdateInquiryStatus(inq.id, 'selesai')}
-                        className={`px-2 py-1 text-[10px] rounded font-semibold ${inq.status === 'selesai' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                      >
-                        Selesai
-                      </button>
-
-                      <button
-                        onClick={() => handleDeleteInquiry(inq.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                        title="Hapus Pesan"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => { setEditArt({...art}); setArtErr(''); setIsArtFormOpen(true); }} className="p-1.5 bg-gray-100 rounded-lg"><Edit className="w-3.5 h-3.5"/></button>
+                        <button onClick={() => handleDeleteArt(art.id)} className="p-1.5 bg-gray-100 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Subjek & Message Body */}
-                  <div className="bg-[#FAF8F5] p-4 rounded-xl border border-brand-cream-dark/50 text-xs sm:text-sm text-gray-705">
-                    <div className="font-bold text-brand-brown-dark font-sans mb-1">
-                      Subjek: {inq.subject || '(Tidak ada subjek)'}
-                    </div>
-                    <p className="leading-relaxed whitespace-pre-wrap">
-                      {inq.message}
-                    </p>
-                  </div>
-
-                  {/* Attachment metadata product reference */}
-                  {(inq.product_title || inq.product_code) && (
-                    <div className="p-3 bg-brand-cream/40 rounded-lg text-[11px] text-[#B01818] flex items-center justify-between border border-brand-cream-dark/30">
-                      <span>Referensi Halaman Detail Produk: <strong>{inq.product_title}</strong></span>
-                      <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border">{inq.product_code}</span>
-                    </div>
-                  )}
-
                 </div>
               ))}
-
-              {inquiries.length === 0 && (
-                <div className="bg-white rounded-xl py-12 text-center text-gray-400 border border-brand-cream-dark shadow-sm">
-                  Belum ada pesan masuk dari pengunjung website.
-                </div>
-              )}
             </div>
-
           </div>
         )}
 
+        {/* Tab Konten Database CRM Pelanggan */}
+        {adminTab === 'customers' && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="bg-white rounded-2xl border border-cream-dark shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead>
+                    <tr className="bg-brand-cream text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-cream-dark">
+                      <th className="p-4">Nama Pelanggan</th>
+                      <th className="p-4">Email</th>
+                      <th className="p-4 w-36">WhatsApp</th>
+                      <th className="p-4">Alamat Domisili</th>
+                      <th className="p-4 w-28 text-center">Fekuensi Order</th>
+                      <th className="p-4 w-36 text-right">Total Akumulasi Spend</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cream-dark/40">
+                    {customerDb.map((c, i) => (
+                      <tr key={i} className="hover:bg-brand-cream/30 transition-colors">
+                        <td className="p-4 font-bold text-sm text-stone-900">{c.name}</td>
+                        <td className="p-4">{c.email !== '-' ? <a href={`mailto:${c.email}`} className="text-indigo-700 font-mono text-xs">{c.email}</a> : <span className="text-gray-400">—</span>}</td>
+                        <td className="p-4">{c.phone !== '-' ? <a href={`https://wa.me/${c.phone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="text-emerald-700 font-bold font-mono text-xs">{c.phone}</a> : <span className="text-gray-400">—</span>}</td>
+                        <td className="p-4 text-xs text-stone-700 max-w-[200px] truncate" title={c.address}>{c.address}</td>
+                        <td className="p-4 font-mono font-bold text-center text-sm">{c.totalOrders}</td>
+                        <td className="p-4 font-mono font-bold text-right text-emerald-700 text-sm">{formatPrice(c.totalSpend)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
 
-      {/* ========================================================================= */}
-      {/* ===================== EDIT/CREATE PRODUCT INLINE MODAL ===================== */}
-      {/* ========================================================================= */}
-      {isFormOpen && editingProduct && (
-        <div id="product-form-backdrop" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div 
-            id="product-form-surface" 
-            className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden relative animate-fade-in max-h-[90vh] overflow-y-auto"
-          >
-            
-            <div className="p-5 bg-brand-cream/80 border-b border-brand-cream-dark flex items-center justify-between">
-              <h3 className="font-serif text-lg font-bold text-brand-brown-dark">
-                {editingProduct.id ? 'Edit Detail Karya Tenun' : 'Tambah Karya Tenun Baru'}
-              </h3>
-              <button 
-                onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}
-                className="p-1 text-gray-500 hover:text-red-650"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      {/* ── Modal Block: Formulir Produk ─────────────────────────────────── */}
+      {isFormOpen && editProd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsFormOpen(false); setEditProd(null); }}}>
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-brand-cream border-b border-cream-dark flex-shrink-0">
+              <h3 className="font-serif text-lg font-bold text-stone-900">{editProd.id ? 'Edit Karya Tenun Adat' : 'Registrasi Produk Baru'}</h3>
+              <button onClick={() => { setIsFormOpen(false); setEditProd(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5"/></button>
             </div>
-
-            <form onSubmit={handleSaveProduct} className="p-6 space-y-4 md:space-y-5">
-              
-              {formError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-lg font-semibold">
-                  {formError}
-                </div>
-              )}
-
+            <form onSubmit={handleSaveProd} className="p-6 space-y-4 overflow-y-auto flex-1">
+              {formErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl font-semibold flex items-center gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0"/>{formErr}</div>}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                
-                {/* Title */}
                 <div>
-                  <label htmlFor="form-prod-title" className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1">
-                    Nama Karya *
-                  </label>
-                  <input 
-                    type="text" 
-                    id="form-prod-title"
-                    required
-                    placeholder="Contoh: Tenun Sumba Kambera"
-                    value={editingProduct.title || ''}
-                    onChange={(e) => setEditingProduct({...editingProduct, title: e.target.value})}
-                    className="w-full px-3 py-2 text-sm bg-white border border-brand-cream-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-gold text-gray-800"
-                  />
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Nama Kain *</label>
+                  <input type="text" required placeholder="Tenun Sumba Kambera" value={editProd.title||''} onChange={e=>setEditProd({...editProd,title:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl" />
                 </div>
-
-                {/* Code */}
                 <div>
-                  <label htmlFor="form-prod-code" className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1">
-                    Kode Produk *
-                  </label>
-                  <input 
-                    type="text" 
-                    id="form-prod-code"
-                    required
-                    placeholder="Contoh: TIS-KAM07"
-                    value={editingProduct.code || ''}
-                    onChange={(e) => setEditingProduct({...editingProduct, code: e.target.value})}
-                    className="w-full px-3 py-2 text-sm bg-white border border-brand-cream-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-gold text-gray-805"
-                  />
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Kode SKU Produk *</label>
+                  <input type="text" required placeholder="TIS-KAM07" value={editProd.code||''} onChange={e=>setEditProd({...editProd,code:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl" />
                 </div>
-
-                {/* Category */}
                 <div>
-                  <label htmlFor="form-prod-category" className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1">
-                    Kategori Tenun *
-                  </label>
-                  <select
-                    id="form-prod-category"
-                    value={editingProduct.category || 'Kain Tenun'}
-                    onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})}
-                    className="w-full px-3 py-2 text-sm bg-white border border-brand-cream-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-gold text-gray-800"
-                  >
-                    <option value="Kain Tenun">Kain Tenun</option>
-                    <option value="Tas & Aksesori">Tas & Aksesori</option>
-                    <option value="Selendang">Selendang</option>
-                    <option value="Dekorasi">Dekorasi</option>
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Kategori Klasifikasi</label>
+                  <select value={editProd.category||'Kain Tenun'} onChange={e=>setEditProd({...editProd,category:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl">
+                    {['Kain Tenun','Tas & Aksesori','Selendang','Dekorasi'].map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-
-                {/* Price */}
                 <div>
-                  <label htmlFor="form-prod-price" className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1">
-                    Harga (IDR Rupiah) *
-                  </label>
-                  <input 
-                    type="number" 
-                    id="form-prod-price"
-                    required
-                    placeholder="Contoh: 1500000"
-                    value={editingProduct.price || ''}
-                    onChange={(e) => setEditingProduct({...editingProduct, price: Number(e.target.value)})}
-                    className="w-full px-3 py-2 text-sm bg-white border border-brand-cream-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-gold text-gray-805"
-                  />
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Harga Nominal (IDR) *</label>
+                  <input type="number" required placeholder="1500000" value={editProd.price||''} onChange={e=>setEditProd({...editProd,price:Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
                 </div>
-
-                {/* Image URL */}
+                <div>
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Kuantitas Alokasi Stok *</label>
+                  <input type="number" required min={0} placeholder="5" value={editProd.stock??5} onChange={e=>setEditProd({...editProd,stock:Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Identitas Penenun (Mama)</label>
+                  <input type="text" placeholder="Mama Seraphine Weetebula" value={editProd.weaver||''} onChange={e=>setEditProd({...editProd,weaver:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+                </div>
                 <div className="md:col-span-2">
-                  <label htmlFor="form-prod-image" className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1">
-                    URL Gambar Karya (Unsplash / Hotlinks) *
-                  </label>
-                  <input 
-                    type="url" 
-                    id="form-prod-image"
-                    required
-                    placeholder="https://images.unsplash.com/photo-..."
-                    value={editingProduct.image || ''}
-                    onChange={(e) => setEditingProduct({...editingProduct, image: e.target.value})}
-                    className="w-full px-3 py-2 text-sm bg-white border border-brand-cream-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-gold text-gray-805"
-                  />
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Akses Alamat URL Gambar *</label>
+                  <input type="url" required placeholder="https://images.unsplash.com/photo-..." value={editProd.image||''} onChange={e=>setEditProd({...editProd,image:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
                 </div>
-
-                {/* Weaver (Mama) */}
-                <div>
-                  <label htmlFor="form-prod-weaver" className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1">
-                    Penenun (Mama Adat)
-                  </label>
-                  <input 
-                    type="text" 
-                    id="form-prod-weaver"
-                    placeholder="Contoh: Mama Seraphine Weetebula"
-                    value={editingProduct.weaver || ''}
-                    onChange={(e) => setEditingProduct({...editingProduct, weaver: e.target.value})}
-                    className="w-full px-3 py-2 text-sm bg-white border border-brand-cream-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-gold text-gray-805"
-                  />
-                </div>
-
-                {/* Making Time */}
-                <div>
-                  <label htmlFor="form-prod-makingtime" className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1">
-                    Durasi Pengerjaan
-                  </label>
-                  <input 
-                    type="text" 
-                    id="form-prod-makingtime"
-                    placeholder="Contoh: 3 Bulan / 4 Minggu"
-                    value={editingProduct.makingTime || ''}
-                    onChange={(e) => setEditingProduct({...editingProduct, makingTime: e.target.value})}
-                    className="w-full px-3 py-2 text-sm bg-white border border-brand-cream-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-gold text-gray-850"
-                  />
-                </div>
-
-                {/* Dimensions */}
-                <div>
-                  <label htmlFor="form-prod-dimensions" className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1">
-                    Ukuran (Dimensi)
-                  </label>
-                  <input 
-                    type="text" 
-                    id="form-prod-dimensions"
-                    placeholder="Contoh: 240 x 110 cm"
-                    value={editingProduct.dimensions || ''}
-                    onChange={(e) => setEditingProduct({...editingProduct, dimensions: e.target.value})}
-                    className="w-full px-3 py-2 text-sm bg-white border border-brand-cream-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-gold text-gray-850"
-                  />
-                </div>
-
-                {/* Featured Checkbox toggle */}
-                <div className="flex items-center gap-2 pt-5">
-                  <input 
-                    type="checkbox" 
-                    id="form-prod-featured"
-                    checked={editingProduct.isFeatured || false}
-                    onChange={(e) => setEditingProduct({...editingProduct, isFeatured: e.target.checked})}
-                    className="w-4.5 h-4.5 accent-brand-brown cursor-pointer"
-                  />
-                  <label htmlFor="form-prod-featured" className="text-xs uppercase font-mono font-bold text-gray-600 block cursor-pointer">
-                    Set Sebagai Unggulan (Featured)
-                  </label>
-                </div>
-
-                {/* Description input */}
                 <div className="md:col-span-2">
-                  <label htmlFor="form-prod-description" className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1">
-                    Naskah Filosofi Detail Karya / Deskripsi
-                  </label>
-                  <textarea 
-                    id="form-prod-description"
-                    rows={4}
-                    placeholder="Tuliskan latar belakang budaya atau makna geometris motif di tenun ini..."
-                    value={editingProduct.description || ''}
-                    onChange={(e) => setEditingProduct({...editingProduct, description: e.target.value})}
-                    className="w-full px-3 py-2 text-sm bg-white border border-brand-cream-dark rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-gold text-gray-805 resize-none"
-                  />
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Filosofi Motif & Deskripsi Produk</label>
+                  <textarea rows={3} placeholder="Tuliskan latar belakang kebudayaan adat atau makna geometris motif kain..." value={editProd.description||''} onChange={e=>setEditProd({...editProd,description:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl resize-none"/>
                 </div>
-
               </div>
-
-              {/* Save or cancel buttons */}
-              <div className="flex justify-end gap-2 pt-4 border-t border-brand-cream-dark/50">
-                <button
-                  type="button"
-                  onClick={() => { setIsFormOpen(false); setEditingProduct(null); }}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold tracking-wide uppercase rounded-lg"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={btnSaving}
-                  className="px-5 py-2 bg-[#B01818] hover:bg-[#8E1212] text-white text-xs font-bold tracking-wide uppercase rounded-lg"
-                >
-                  {btnSaving ? 'Menyimpan...' : 'Simpan Detail'}
-                </button>
+              <div className="flex justify-end gap-2 pt-2 border-t border-cream-dark">
+                <button type="button" onClick={() => { setIsFormOpen(false); setEditProd(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button>
+                <button type="submit" disabled={savingProd} className="px-5 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase rounded-xl shadow">{savingProd ? 'Memproses...' : 'Simpan Entri'}</button>
               </div>
-
             </form>
+          </div>
+        </div>
+      )}
 
+      {/* ── Modal Block: Formulir Artikel ─────────────────────────────────── */}
+      {isArtFormOpen && editArt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsArtFormOpen(false); setEditArt(null); }}}>
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-brand-cream border-b border-cream-dark flex-shrink-0">
+              <h3 className="font-serif text-lg font-bold text-stone-900">{editArt.id ? 'Edit Manuskrip Edukasi' : 'Tulis Artikel Baru'}</h3>
+              <button onClick={() => { setIsArtFormOpen(false); setEditArt(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5"/></button>
+            </div>
+            <form onSubmit={handleSaveArt} className="p-6 space-y-4 overflow-y-auto flex-1">
+              {artErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl font-semibold flex items-center gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0"/>{artErr}</div>}
+              <div>
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Judul Manuskrip *</label>
+                <input type="text" required placeholder="Sejarah Makna Motif Kuda Sumba" value={editArt.title||''} onChange={e=>setEditArt({...editArt,title:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+              </div>
+              <div>
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Ringkasan Narasi (Excerpt) *</label>
+                <input type="text" required placeholder="Deskripsi singkat isi artikel untuk halaman grid depan" value={editArt.excerpt||''} onChange={e=>setEditArt({...editArt,excerpt:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+              </div>
+              <div>
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Konten Narasi Lengkap *</label>
+                <textarea required rows={8} placeholder="Tuliskan seluruh isi kajian filosofis secara komprehensif..." value={editArt.content||''} onChange={e=>setEditArt({...editArt,content:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl resize-none"/>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-cream-dark">
+                <button type="button" onClick={() => { setIsArtFormOpen(false); setEditArt(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button>
+                <button type="submit" disabled={savingArt} className="px-5 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase rounded-xl shadow">{savingArt ? 'Menerbitkan...' : 'Rilis Narasi'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

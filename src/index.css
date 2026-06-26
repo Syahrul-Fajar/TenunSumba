@@ -1,45 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans:  "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", Georgia, Cambria, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-
-  --color-brand-brown-light: #CC2E2E;
-  --color-brand-brown-dark: #8E1212;
-  --color-brand-brown: #B01818;
-  --color-brand-gold: #D4702E;
-  --color-brand-gold-dark: #B85C1A;
-  --color-brand-cream: #faf8f8;
-  --color-brand-cream-dark: #f3e8e8;
+  --font-mono:  "JetBrains Mono", ui-monospace, monospace;
 }
 
+/* ── Reset & Base Theme ───────────────────────────────────────────────────── */
 body {
-  background-color: var(--color-brand-cream);
-  color: #231414;
+  background-color: #FBF8F4; /* Krem Dasar */
+  color: #3D1A0A; /* Cokelat Gelap untuk Legibilitas Tinggi */
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
-/* Base interactive transitions */
-button, a {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+/* ── Komponen Modular ─────────────────────────────────────────────────────── */
+.text-gradient {
+  background: linear-gradient(135deg, #7B1618 0%, #C8973A 55%, #E0B060 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-/* Scrollbar customization */
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-track {
-  background: var(--color-brand-cream);
-}
-::-webkit-scrollbar-thumb {
-  background: #B01818;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #870F0F;
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#7B1618] hover:bg-[#5A0E10] text-white font-bold text-sm rounded-xl shadow-[0_4px_14px_rgba(123,22,24,0.3)] hover:shadow-[0_6px_20px_rgba(123,22,24,0.4)] transition-all hover:-translate-y-0.5 cursor-pointer;
 }
 
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent hover:bg-[#7B1618] text-[#7B1618] hover:text-white font-bold text-sm rounded-xl border-2 border-[#7B1618] transition-all hover:-translate-y-0.5 cursor-pointer;
+}
+
+.card-base {
+  @apply bg-white border border-[#EFE6DA] rounded-2xl shadow-sm hover:shadow-md transition-shadow;
+}
+
+/* ── Scrollbar Estetik ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #FBF8F4; }
+::-webkit-scrollbar-thumb { background: #C8973A80; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #C8973A; }
+
+/* ── Animasi Performa GPU ─────────────────────────────────────────────────── */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+.animate-fade-up { animation: fadeUp 0.5s ease-out forwards; }

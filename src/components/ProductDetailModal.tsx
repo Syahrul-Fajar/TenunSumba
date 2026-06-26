@@ -1,153 +1,173 @@
-import React from 'react';
-import { X, Calendar, ShoppingBag, Sparkles, MoveRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Calendar, ShoppingBag, Sparkles, ArrowRight, ArrowLeft, Send, Package, CheckCircle2, Ruler, AlertCircle } from 'lucide-react';
 import { Product } from '../types';
+import { dbService } from '../lib/supabase';
 
 interface ProductDetailModalProps {
   product: Product | null;
   onClose: () => void;
 }
 
+const fmt = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
+
 export default function ProductDetailModal({ product, onClose }: ProductDetailModalProps) {
+  const [isOrdering, setIsOrdering] = useState(false);
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', address: '', quantity: 1 });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (product) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+      setIsOrdering(false);
+      setOrderSuccess(false);
+      setFormData({ name: '', email: '', phone: '', address: '', quantity: 1 });
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [product]);
+
   if (!product) return null;
+  const isOutOfStock = (product.stock ?? 5) <= 0;
 
-  // Format currency
-  const formatPrice = (num: number) => {
-    return 'Rp ' + num.toLocaleString('id-ID');
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  // Generate customized WhatsApp text link
-  const generateWhatsAppLink = (prod: Product) => {
-    const phoneNumber = '6289542177309'; // Configured from mock UI
-    const text = encodeURIComponent(
-      `Halo Balai Tenun CD Seraphine Weetebula, saya tertarik dengan produk:\n\n*Nama:* ${prod.title}\n*Kode:* ${prod.code}\n*Harga:* ${formatPrice(prod.price)}\n*Penenun:* ${prod.weaver}\n\nApakah stok produk ini masih tersedia atau bisa dipesan secara pre-order? Terima kasih!`
-    );
-    return `https://wa.me/${phoneNumber}?text=${text}`;
-  };
-
-  const trackWhatsAppInquiry = () => {
-    import('../lib/supabase').then(({ dbService }) => {
-      dbService.sendInquiry({
-        name: 'Pengunjung Web (WhatsApp)',
-        email: 'via-whatsapp@seraphine.org',
-        subject: `Konsultasi: ${product.title}`,
-        message: `Pengunjung mengklik tombol tanya WhatsApp langsung untuk karya tenun pakan Sumba "${product.title}" dengan kode ${product.code}. Hubungi segera.`,
-        product_title: product.title,
-        product_code: product.code
+  const handleOrderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.phone || !formData.address) {
+      setError('Harap lengkapi entri wajib.'); return;
+    }
+    setIsSubmitting(true);
+    setError('');
+    try {
+      await dbService.createOrder({
+        customerName: formData.name, customerEmail: formData.email || '-', customerPhone: formData.phone,
+        customerAddress: formData.address, productId: product.id, productTitle: product.title,
+        productCode: product.code, price: product.price, quantity: formData.quantity,
+        totalPrice: product.price * formData.quantity, status: 'baru'
       });
-    });
+      setOrderSuccess(true);
+      setTimeout(() => onClose(), 4000);
+    } catch (err) {
+      setError('Gagal merekam pesanan.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const inputCls = "w-full px-4 py-3 text-sm bg-white border border-[#EFE6DA] rounded-xl text-[#3D1A0A] focus:outline-none focus:border-[#C8973A] transition-colors";
+  const labelCls = "block text-[10px] font-mono font-bold uppercase tracking-widest text-[#7A6558] mb-1.5";
 
   return (
-    <div id="product-detail-backdrop" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity duration-300">
-      <div 
-        id="product-detail-surface" 
-        className="relative w-full max-w-4xl bg-white rounded-2xl overflow-hidden shadow-2xl animate-fade-in flex flex-col md:flex-row max-h-[90vh] md:max-h-none overflow-y-auto"
-      >
-        {/* Close Button Pin */}
-        <button 
-          id="close-modal-btn"
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 bg-black/50 hover:bg-black/80 text-white rounded-full focus:outline-none transition-all duration-200"
-          aria-label="Close details"
-        >
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="relative w-full max-w-5xl bg-white rounded-[24px] shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh] animate-scale-in border border-[#EFE6DA]">
+        
+        <button onClick={onClose} className="md:hidden absolute top-4 right-4 z-20 w-10 h-10 flex items-center justify-center bg-white/90 shadow-sm text-[#3D1A0A] rounded-full">
           <X className="w-5 h-5" />
         </button>
 
-        {/* Left Side: Dynamic Product Image with golden accent border */}
-        <div className="w-full md:w-1/2 h-72 md:h-[500px] relative bg-brand-cream-dark border-r border-brand-cream-dark">
-          <img 
-            src={product.image} 
-            alt={product.title} 
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute top-4 left-4">
-            <span className="px-3 py-1.5 text-xs font-mono font-bold tracking-widest bg-[#B01818]/90 text-white uppercase rounded shadow-sm border border-brand-gold/50">
+        {/* ── Panel Visual Kiri ── */}
+        <div className="w-full md:w-2/5 relative flex-shrink-0 bg-[#F5EDE3]">
+          <img src={product.image} alt={product.title} className="absolute inset-0 w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          
+          <div className="absolute top-6 left-6 flex flex-col gap-2">
+            <span className="inline-flex px-3 py-1 bg-white/95 text-[#7B1618] rounded-full text-[10px] font-mono font-bold uppercase tracking-widest shadow-sm">
               {product.category}
             </span>
           </div>
+          <div className="absolute bottom-6 left-6 right-6 text-white text-sm font-mono tracking-wide">
+            SKU: {product.code}
+          </div>
         </div>
 
-        {/* Right Side: Curated Product Metadata */}
-        <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col justify-between bg-[#FDFBF9]">
-          <div>
-            <div className="text-xs font-mono text-brand-gold font-bold tracking-wider mb-1">
-              {product.code}
+        {/* ── Panel Konten Kanan ── */}
+        <div className="w-full md:w-3/5 flex flex-col relative overflow-y-auto custom-scrollbar bg-[#FBF8F4]">
+          <button onClick={onClose} className="hidden md:flex absolute top-6 right-6 z-10 w-10 h-10 items-center justify-center text-[#7A6558] hover:text-[#7B1618] hover:bg-white border border-[#EFE6DA] rounded-full transition-all bg-[#FBF8F4]">
+            <X className="w-5 h-5" />
+          </button>
+
+          {orderSuccess ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
+              <div className="w-20 h-20 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-500 mb-6">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+              <h2 className="font-serif text-3xl font-bold text-[#3D1A0A] mb-3">Pesanan Terkonfirmasi!</h2>
+              <p className="text-[#7A6558] max-w-md mx-auto mb-6 text-sm">
+                Sistem telah merekam permintaan Anda. Jendela ini akan otomatis tertutup.
+              </p>
             </div>
-            <h3 className="font-serif text-2xl md:text-3xl font-bold text-brand-brown-dark leading-tight mb-2">
-              {product.title}
-            </h3>
-            <div className="text-xl md:text-2xl font-sans font-bold text-[#B01818] mb-4">
-              {formatPrice(product.price)}
-            </div>
-
-            {/* Divider */}
-            <hr className="border-brand-cream-dark my-4" />
-
-            <h4 className="text-xs uppercase tracking-widest text-[#7A5050] font-bold mb-2">
-              Deskripsi Karya
-            </h4>
-            <p className="text-sm text-gray-700 leading-relaxed mb-6">
-              {product.description}
-            </p>
-
-            {/* Cultural Information Grid Section */}
-            <div className="grid grid-cols-2 gap-3 mb-6">
+          ) : isOrdering ? (
+            <div className="flex-1 p-8 flex flex-col">
+              <button onClick={() => setIsOrdering(false)} className="self-start flex items-center gap-2 text-xs font-bold text-[#C8973A] hover:text-[#7B1618] uppercase tracking-widest mb-6 transition-colors">
+                <ArrowLeft className="w-4 h-4" /> Kembali
+              </button>
               
-              <div className="bg-[#FFF5F5] p-3 rounded-lg border border-[#EAD5D5]">
-                <div className="flex items-center gap-1.5 text-xs text-brand-gold font-bold uppercase mb-1">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Penenun</span>
-                </div>
-                <div className="text-xs text-[#5A1010] font-medium truncate">
-                  {product.weaver}
-                </div>
-              </div>
+              <h2 className="font-serif text-2xl font-bold text-[#3D1A0A] mb-1">Formulir Akuisisi</h2>
+              <p className="text-sm text-[#7A6558] mb-6">Verifikasi identitas pengiriman untuk mahakarya ini.</p>
 
-              <div className="bg-[#FAF6F2] p-3 rounded-lg border border-brand-cream-dark">
-                <div className="flex items-center gap-1.5 text-xs text-brand-gold font-bold uppercase mb-1">
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>Durasi Pembuatan</span>
-                </div>
-                <div className="text-xs text-brand-brown-dark font-medium">
-                  {product.makingTime}
-                </div>
-              </div>
+              {error && <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</div>}
 
-              {product.dimensions && (
-                <div className="col-span-2 bg-[#FAF6F2] p-3 rounded-lg border border-brand-cream-dark">
-                  <div className="text-xs text-brand-gold font-bold uppercase mb-1">
-                    Dimensi Kain / Ukuran
+              <form onSubmit={handleOrderSubmit} className="space-y-4 flex-1 flex flex-col">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Nama Lengkap *</label>
+                    <input type="text" name="name" required value={formData.name} onChange={handleChange} className={inputCls} />
                   </div>
-                  <div className="text-xs text-brand-brown-dark font-medium">
-                    {product.dimensions}
+                  <div>
+                    <label className={labelCls}>WhatsApp Aktif *</label>
+                    <input type="tel" name="phone" required value={formData.phone} onChange={handleChange} className={inputCls} />
                   </div>
                 </div>
-              )}
+                <div>
+                  <label className={labelCls}>Alamat Pengiriman *</label>
+                  <textarea name="address" required rows={2} value={formData.address} onChange={handleChange} className={`${inputCls} resize-none`} />
+                </div>
+                <div className="flex items-center justify-between p-4 bg-white border border-[#EFE6DA] rounded-xl">
+                  <span className={labelCls}>Kuantitas Unit</span>
+                  <div className="flex items-center gap-4 bg-[#FBF8F4] rounded-lg p-1 border border-[#EFE6DA]">
+                    <button type="button" onClick={() => setFormData(p => ({ ...p, quantity: Math.max(1, p.quantity - 1) }))} className="w-8 h-8 flex items-center justify-center font-bold">−</button>
+                    <span className="w-6 text-center font-bold text-[#3D1A0A] text-sm font-mono">{formData.quantity}</span>
+                    <button type="button" onClick={() => setFormData(p => ({ ...p, quantity: Math.min(product.stock ?? 5, p.quantity + 1) }))} className="w-8 h-8 flex items-center justify-center font-bold">+</button>
+                  </div>
+                </div>
 
+                <div className="mt-auto pt-6 border-t border-[#EFE6DA]">
+                  <div className="flex justify-between mb-4"><span className="text-sm font-bold text-[#7A6558]">Total Pembayaran</span><span className="text-xl font-bold text-[#7B1618] font-mono">{fmt(product.price * formData.quantity)}</span></div>
+                  <button type="submit" disabled={isSubmitting} className="btn-primary w-full py-4 text-sm">{isSubmitting ? 'Memproses...' : 'Konfirmasi Pesanan'}</button>
+                </div>
+              </form>
             </div>
-          </div>
-
-          {/* Inquiry Options Footer Trigger */}
-          <div className="mt-4 flex flex-col gap-2">
-            <a
-              id="whatsapp-inquiry-btn"
-              href={generateWhatsAppLink(product)}
-              onClick={trackWhatsAppInquiry}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center gap-2.5 w-full py-3 px-4 bg-[#B01818] hover:bg-[#8E1212] text-white font-sans text-sm font-semibold tracking-wide uppercase rounded-lg shadow-md transition-all duration-200"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Hubungi via WhatsApp</span>
-              <MoveRight className="w-4 h-4" />
-            </a>
-            
-            <p className="text-[10px] text-center text-gray-400">
-              *Pembelian diproses secara langsung dengan perajin demi memberdayakan kesejahteraan perajin lokal Sumba 100%.
-            </p>
-          </div>
-
+          ) : (
+            <div className="flex-1 flex flex-col p-8 md:p-10">
+              <div className="flex-1">
+                <h2 className="font-serif text-3xl font-extrabold text-[#3D1A0A] leading-tight mb-2">{product.title}</h2>
+                <div className="mb-6"><span className="text-2xl font-extrabold text-[#7B1618] font-mono">{fmt(product.price)}</span></div>
+                <p className="text-sm text-[#5A4538] leading-relaxed mb-6">{product.description}</p>
+                <div className="grid grid-cols-2 gap-4 py-4 border-y border-[#EFE6DA]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white border border-[#EFE6DA] flex items-center justify-center text-[#C8973A]"><Ruler className="w-5 h-5" /></div>
+                    <div><span className="block text-[10px] font-mono uppercase tracking-widest text-[#7A6558]">Dimensi</span><span className="block text-sm font-bold text-[#3D1A0A]">{product.dimensions || '—'}</span></div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white border border-[#EFE6DA] flex items-center justify-center text-[#C8973A]"><Calendar className="w-5 h-5" /></div>
+                    <div><span className="block text-[10px] font-mono uppercase tracking-widest text-[#7A6558]">Pengerjaan</span><span className="block text-sm font-bold text-[#3D1A0A]">{product.makingTime}</span></div>
+                  </div>
+                </div>
+              </div>
+              <div className="pt-6 mt-6">
+                <button onClick={() => setIsOrdering(true)} disabled={isOutOfStock} className={`w-full flex justify-center gap-2 py-4 text-sm font-bold text-white rounded-xl transition-all ${isOutOfStock ? 'bg-gray-400 cursor-not-allowed' : 'btn-primary'}`}>
+                  <ShoppingBag className="w-5 h-5" /> {isOutOfStock ? 'Stok Habis' : 'Inisiasi Transaksi'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,142 +1,109 @@
 import React from 'react';
-import { Phone, Mail, Globe, MapPin, Instagram, Youtube, Facebook } from 'lucide-react';
+import { Phone, Mail, MapPin, Instagram, Facebook, MessageCircle } from 'lucide-react';
+
+type Tab = 'home' | 'produk' | 'edukasi' | 'kontak' | 'admin';
 
 interface FooterProps {
-  setCurrentTab: (tab: 'home' | 'produk' | 'kontak' | 'admin') => void;
+  setCurrentTab: (tab: Tab) => void;
 }
 
 export default function Footer({ setCurrentTab }: FooterProps) {
+  const go = (tab: Tab) => { 
+    setCurrentTab(tab); 
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+  };
+
+  const links = [
+    { label: 'Beranda',  tab: 'home'    as Tab },
+    { label: 'Produk',   tab: 'produk'  as Tab },
+    { label: 'Edukasi',  tab: 'edukasi' as Tab },
+    { label: 'Kontak',   tab: 'kontak'  as Tab },
+  ];
+
   return (
-    <footer id="app-footer" className="bg-[#7A1010] text-[#FFF0F0] pt-16 pb-8 border-t-4 border-brand-gold">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 bg-no-repeat bg-right-bottom pb-16">
-          
-          {/* Brand/About Column */}
-          <div className="flex flex-col space-y-5">
-            <button
-              onClick={() => { setCurrentTab('home'); window.scrollTo({ top:0, behavior: 'smooth' }); }}
-              className="flex items-center gap-3 text-left focus:outline-none group self-start"
-            >
-              <div className="w-12 h-12 bg-[#FFF0F0] rounded-md flex items-center justify-center text-[#7A1010] p-2 shadow-md">
-                <svg viewBox="0 0 100 100" className="w-full h-full fill-current">
-                  <path d="M50,5 L95,50 L50,95 L5,50 Z" stroke="currentColor" strokeWidth="5" fill="none" />
-                  <path d="M50,15 L85,50 L50,85 L15,50 Z" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <rect x="42" y="42" width="16" height="16" transform="rotate(45 50 50)" />
-                  <line x1="15" y1="50" x2="85" y2="50" stroke="currentColor" strokeWidth="4" />
-                  <line x1="50" y1="15" x2="50" y2="85" stroke="currentColor" strokeWidth="4" />
+    <footer id="app-footer" className="mt-auto border-t border-white/10 bg-black/40 backdrop-blur-lg">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+
+          {/* Kolom Identitas Brand */}
+          <div className="md:col-span-1 space-y-5">
+            <button onClick={() => go('home')} className="flex items-center gap-3 group focus:outline-none cursor-pointer">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7B1618] to-[#5A0E10] flex items-center justify-center border border-white/10 shadow-[0_0_15px_rgba(123,22,24,0.3)]">
+                <svg viewBox="0 0 40 40" className="w-5 h-5" fill="none">
+                  <path d="M20 4 L36 20 L20 36 L4 20 Z" stroke="#C8973A" strokeWidth="2.5" />
+                  <path d="M20 10 L30 20 L20 30 L10 20 Z" fill="#C8973A" fillOpacity="0.3"/>
+                  <circle cx="20" cy="20" r="3" fill="#C8973A"/>
                 </svg>
               </div>
-              <div>
-                <h4 className="font-serif text-xl font-bold tracking-tight text-white">
-                  CD Seraphine Weetebula
-                </h4>
-                <p className="text-xs font-mono tracking-widest text-brand-gold uppercase">
-                  Warisan Tenun Sumba
-                </p>
+              <div className="text-left">
+                <span className="block font-serif text-base font-bold leading-tight text-white">CD Seraphine</span>
+                <span className="block text-[10px] font-mono text-[#E0B060] uppercase tracking-widest">Tenun Ikat Sumba</span>
               </div>
             </button>
-            <p className="text-sm text-[#E8CBCB] leading-relaxed max-w-sm">
-              Kami melestarikan warisan tenun ikat Sumba warisan leluhur dengan memberdayakan komunitas perempuan lokal melalui karya seni bertenaga tinggi, berkelanjutan, dan bermartabat tinggi.
+            <p className="text-sm text-gray-400 leading-relaxed max-w-xs">
+              Melestarikan warisan budaya tenun ikat Sumba sambil memberdayakan perempuan penenun lokal melalui karya otentik berkualitas tinggi.
             </p>
-            
-            {/* Social Media Row */}
-            <div className="pt-2">
-              <span className="block text-xs uppercase tracking-wider text-brand-gold font-bold mb-3">Sosial Media</span>
-              <div className="flex space-x-3">
-                <a 
-                  href="https://instagram.com" 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="w-9 h-9 flex items-center justify-center rounded-full bg-[#7A1212] border border-[#8E1A1A] hover:bg-brand-gold hover:text-white transition-colors"
-                  aria-label="Instagram"
-                >
-                  <Instagram className="w-4 h-4" />
+            <div className="flex gap-3 pt-1">
+              {[
+                { href: '#', icon: <Facebook className="w-4 h-4"/>, label: 'Facebook' },
+                { href: '#', icon: <Instagram className="w-4 h-4"/>, label: 'Instagram' },
+                { href: 'https://wa.me/6289542177009', icon: <MessageCircle className="w-4 h-4"/>, label: 'WhatsApp' },
+              ].map(s => (
+                <a key={s.label} href={s.href} target="_blank" rel="noreferrer" className="w-9 h-9 flex items-center justify-center rounded-xl border border-white/10 text-gray-400 hover:border-[#C8973A] hover:text-[#C8973A] hover:bg-[#C8973A]/10 transition-all shadow-sm">
+                  {s.icon}
                 </a>
-                <a 
-                  href="https://facebook.com" 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="w-9 h-9 flex items-center justify-center rounded-full bg-[#7A1212] border border-[#8E1A1A] hover:bg-brand-gold hover:text-white transition-colors"
-                  aria-label="Facebook"
-                >
-                  <Facebook className="w-4 h-4" />
-                </a>
-                <a 
-                  href="https://youtube.com" 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="w-9 h-9 flex items-center justify-center rounded-full bg-[#7A1212] border border-[#8E1A1A] hover:bg-brand-gold hover:text-white transition-colors"
-                  aria-label="Youtube"
-                >
-                  <Youtube className="w-4 h-4" />
-                </a>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* Quick Contact Info */}
-          <div className="flex flex-col space-y-5">
-            <h4 className="font-serif text-lg font-semibold text-white tracking-wide border-b border-[#8E1A1A] pb-2">
-              Kontak Kami
-            </h4>
-            <ul className="space-y-4 text-sm text-[#E8CBCB]">
-              <li className="flex items-start gap-3">
-                <MapPin className="w-5 h-5 text-brand-gold mt-0.5 flex-shrink-0" />
-                <span>
-                  Jln. Bulgur, No. 12, Langgalero, Tamboloka, Sumba Barat Daya (SBD), Nusa Tenggara Timur (NTT), Indonesia
-                </span>
-              </li>
-              <li className="flex items-center gap-3">
-                <Phone className="w-5 h-5 text-brand-gold flex-shrink-0" />
-                <a href="tel:+6289542177309" className="hover:text-brand-gold transition-colors">
-                  +62 895-4217-7309
-                </a>
-              </li>
-              <li className="flex items-center gap-3">
-                <Mail className="w-5 h-5 text-brand-gold flex-shrink-0" />
-                <a href="mailto:balaitenunseraphine@gmail.com" className="hover:text-brand-gold transition-colors">
-                  balaitenunseraphine@gmail.com
-                </a>
-              </li>
-              <li className="flex items-center gap-3">
-                <Globe className="w-5 h-5 text-brand-gold flex-shrink-0" />
-                <span>www.cseraphine.com</span>
-              </li>
+          {/* Kolom Navigasi */}
+          <div className="space-y-4">
+            <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-gray-500">Akses Cepat</h4>
+            <ul className="space-y-3">
+              {links.map(l => (
+                <li key={l.tab}>
+                  <button onClick={() => go(l.tab)} className="text-sm text-gray-400 hover:text-[#E0B060] transition-colors flex items-center gap-2 group cursor-pointer">
+                    <span className="w-1 h-1 rounded-full bg-white/20 group-hover:bg-[#E0B060] transition-colors shadow-[0_0_5px_rgba(224,176,96,0)] group-hover:shadow-[0_0_5px_rgba(224,176,96,0.5)]" />
+                    {l.label}
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
 
-          {/* Opening and Empowerment Mission */}
-          <div className="flex flex-col space-y-5">
-            <h4 className="font-serif text-lg font-semibold text-white tracking-wide border-b border-[#8E1A1A] pb-2">
-              Jam Operasional & Kunjungan
-            </h4>
-            <p className="text-sm text-[#E8CBCB] leading-relaxed">
-              Balai Tenun dibuka untuk kunjungan belajar, lokakarya memilin benang, dan pewarnaan alami.
-            </p>
-            <div className="bg-[#7A1414] p-4 rounded border border-[#6E1414]">
-              <div className="flex justify-between text-xs font-mono text-brand-gold uppercase font-bold mb-1">
-                <span>Senin - Sabtu</span>
-                <span>08:00 - 17:00 WITA</span>
-              </div>
-              <p className="text-xs text-[#D9B8B8]">
-                Kunjungan rombongan harap melakukan konfirmasi minimal 2 hari sebelumnya melalui Kontak kami.
-              </p>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Bottom copyright stripe */}
-        <div className="pt-8 mt-8 border-t border-[#8E1A1A] flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-sans text-[#C9A0A0]">
-          <p>© 2026 Balai Tenun CD Seraphine Weetebula. Hak Cipta Dilindungi.</p>
-          <div className="flex flex-wrap gap-4 sm:gap-6 justify-center sm:justify-end">
-            <button onClick={() => { setCurrentTab('home'); window.scrollTo({ top:0 }); }} className="hover:text-[#F3ECE4] cursor-pointer">Beranda</button>
-            <button onClick={() => { setCurrentTab('produk'); window.scrollTo({ top:0 }); }} className="hover:text-[#F3ECE4] cursor-pointer">Katalog Produk</button>
-            <button onClick={() => { setCurrentTab('kontak'); window.scrollTo({ top:0 }); }} className="hover:text-[#F3ECE4] cursor-pointer">Kontak & Alamat</button>
+          {/* Kolom Kontak */}
+          <div className="space-y-4">
+            <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-gray-500">Hubungi Balai</h4>
+            <ul className="space-y-4">
+              <li className="flex items-start gap-3">
+                <MapPin className="w-4 h-4 text-[#C8973A] flex-shrink-0 mt-0.5" />
+                <span className="text-sm text-gray-400 leading-relaxed">
+                  Jln. Bulgur No. 12, Langgalero,<br/>Tambolaka, Sumba Barat Daya, NTT
+                </span>
+              </li>
+              <li className="flex items-center gap-3">
+                <Phone className="w-4 h-4 text-[#C8973A] flex-shrink-0" />
+                <a href="tel:+6289542177009" className="text-sm text-gray-400 hover:text-[#E0B060] transition-colors font-mono">
+                  +62 895-4217-7009
+                </a>
+              </li>
+              <li className="flex items-center gap-3">
+                <Mail className="w-4 h-4 text-[#C8973A] flex-shrink-0" />
+                <a href="mailto:balaitenunseraphine@gmail.com" className="text-sm text-gray-400 hover:text-[#E0B060] transition-colors font-mono break-all">
+                  balaitenunseraphine@gmail.com
+                </a>
+              </li>
+            </ul>
           </div>
         </div>
+      </div>
 
+      {/* Baris Hak Cipta */}
+      <div className="border-t border-white/5 py-5 bg-black/40">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-gray-500 font-mono tracking-wide">
+          <p>© {new Date().getFullYear()} CD Seraphine Weetebula. Hak Cipta Dilindungi.</p>
+          <p className="flex items-center gap-1">Ditenun dengan <span className="text-red-500">❤</span> di Sumba, Indonesia.</p>
+        </div>
       </div>
     </footer>
   );
