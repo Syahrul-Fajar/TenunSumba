@@ -95,15 +95,6 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
             <h1 className="font-serif font-extrabold text-4xl text-[#1A1A1A] mt-2">Katalog <span className="text-gradient">Tenun</span></h1>
             <p className="mt-3 text-sm text-[#64748B] max-w-lg">Eksplorasi mahakarya tenun ikat yang diciptakan dengan dedikasi tinggi oleh para maestri Sumba.</p>
           </div>
-          
-          {isAdmin && (
-            <button 
-              onClick={() => { setEditingProduct({ title:'', category:'Kain Tenun', price:1500000, image:'', description:'', isFeatured:false, code:'TIS-NEW'+Math.floor(Math.random()*900+100), dimensions:'200 x 100 cm', weaver:'Mama Penenun', makingTime:'3 Bulan', stock:5 }); setFormErr(''); setIsFormOpen(true); }}
-              className="btn-primary flex-shrink-0"
-            >
-              <Plus className="w-4 h-4" /> Registrasi Karya Baru
-            </button>
-          )}
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8">
