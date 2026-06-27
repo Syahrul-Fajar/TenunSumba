@@ -746,7 +746,15 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
         {adminTab === 'messages' && (
           <div className="space-y-5 animate-fade-in">
             <div className="grid grid-cols-1 gap-4">
-              {filteredMessages.map(m => {
+              {filteredMessages.length === 0 ? (
+                <div className="bg-white border border-[#F1F5F9] rounded-3xl p-12 text-center shadow-sm flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 bg-[#7B1618]/5 text-maroon rounded-full flex items-center justify-center mb-3.5">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <p className="text-sm font-bold text-stone-900 mb-1">Belum Ada Pesan Masuk</p>
+                  <p className="text-xs text-gray-400 max-w-xs leading-relaxed">Semua konsultasi, pertanyaan, atau pesan kustom dari halaman kontak akan otomatis terhimpun di sini.</p>
+                </div>
+              ) : filteredMessages.map(m => {
                 const messageStatus = STATUS_PESAN[m.status] || STATUS_PESAN.baru;
                 return (
                   <div key={m.id} className={`bg-white rounded-2xl border shadow-sm p-5 space-y-3 ${m.status === 'baru' ? 'border-rose-200 bg-rose-50/20' : 'border-[#F1F5F9]'}`}>
