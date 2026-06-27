@@ -214,7 +214,7 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
 
       {/* ── Modal Form Modifikasi Produk (Admin) ── */}
       {isFormOpen && editingProduct && isAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setIsFormOpen(false); }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setIsFormOpen(false); }}>
           <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col animate-scale-in">
             <div className="flex items-center justify-between p-5 bg-[#FFFFFF] border-b border-[#F1F5F9] flex-shrink-0">
               <h3 className="font-serif text-lg font-bold text-[#1A1A1A]">{editingProduct.id ? 'Modifikasi Karya Tenun' : 'Registrasi Produk Baru'}</h3>

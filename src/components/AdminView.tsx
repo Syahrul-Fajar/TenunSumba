@@ -793,7 +793,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
 
       {/* ── Modal Block: Formulir Produk ─────────────────────────────────── */}
       {isFormOpen && editProd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsFormOpen(false); setEditProd(null); }}}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsFormOpen(false); setEditProd(null); }}}>
           <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-scale-in">
             <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9] flex-shrink-0">
               <h3 className="font-serif text-lg font-bold text-stone-900">{editProd.id ? 'Edit Karya Tenun Adat' : 'Registrasi Produk Baru'}</h3>
@@ -868,7 +868,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
 
       {/* ── Modal Block: Formulir Artikel ─────────────────────────────────── */}
       {isArtFormOpen && editArt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsArtFormOpen(false); setEditArt(null); }}}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsArtFormOpen(false); setEditArt(null); }}}>
           <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-scale-in">
             <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9] flex-shrink-0">
               <h3 className="font-serif text-lg font-bold text-stone-900">{editArt.id ? 'Edit Manuskrip Edukasi' : 'Tulis Artikel Baru'}</h3>
