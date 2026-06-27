@@ -30,7 +30,7 @@ body {
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#7B1618] hover:bg-[#5A0E10] text-white font-bold text-sm rounded-xl shadow-[0_4px_14px_rgba(123,22,24,0.3)] hover:shadow-[0_6px_20px_rgba(123,22,24,0.4)] transition-all hover:-translate-y-0.5 cursor-pointer;
+  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-[#7B1618] to-[#9A1F22] hover:from-[#5A0E10] hover:to-[#7B1618] text-white font-bold text-sm rounded-xl shadow-[0_4px_14px_rgba(123,22,24,0.3)] hover:shadow-[0_6px_20px_rgba(123,22,24,0.4)] transition-all hover:-translate-y-0.5 cursor-pointer;
 }
 
 .btn-ghost {

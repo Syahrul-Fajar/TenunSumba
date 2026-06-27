@@ -46,8 +46,8 @@ export default function HomeView({ setCurrentTab, onSelectProduct, products = []
         </div>
 
         <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 text-[11px] font-mono font-bold uppercase mb-8 text-[#9A1F22] bg-white/10 px-5 py-2.5 rounded-full tracking-widest border border-white/20 backdrop-blur-sm">
-            <span className="w-2 h-2 rounded-full bg-[#9A1F22] animate-pulse" />
+          <div className="inline-flex items-center gap-2 text-[11px] font-mono font-bold uppercase mb-8 text-[#E0B060] bg-white/10 px-5 py-2.5 rounded-full tracking-widest border border-white/20 backdrop-blur-sm">
+            <span className="w-2 h-2 rounded-full bg-[#E0B060] animate-pulse" />
             Sentra Kerajinan Tangan Sumba, NTT
           </div>
           
