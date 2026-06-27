@@ -375,24 +375,36 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     <div id="admin-workspace" className="min-h-screen bg-brand-cream pt-10 pb-24 md:pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Top Header Control */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 text-center sm:text-left">
-          <div className="flex flex-col items-center sm:items-start gap-1">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 flex items-center justify-center">
-                <img src="/favicon.png" alt="Logo Seraphine" className="w-full h-full object-contain" />
-              </div>
-              <h1 className="font-serif text-xl sm:text-2xl font-bold text-stone-900">Panel Administrasi Balai</h1>
+        {/* Top Header Control (Unified Dashboard Toolbar Card) */}
+        <div className="bg-white border border-[#EFE6DA] rounded-3xl p-4 sm:p-5 mb-8 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#7B1618]/5 rounded-2xl flex items-center justify-center border border-[#7B1618]/10 flex-shrink-0">
+              <img src="/favicon.png" alt="Logo Seraphine" className="w-6 h-6 object-contain" />
+            </div>
+            <div className="text-left">
+              <h1 className="font-serif text-base sm:text-lg font-extrabold text-stone-900 leading-tight">Panel Administrasi</h1>
+              <p className="text-[9px] font-mono uppercase tracking-widest text-[#C8973A] font-bold">Seraphine Weetebula</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 w-full sm:w-auto">
-            <button onClick={loadData} disabled={isLoading} className="p-2.5 bg-white border border-[#EFE6DA] rounded-xl text-stone-500 hover:text-maroon transition-all shadow-sm">
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#EFE6DA]">
+            <button 
+              onClick={loadData} 
+              disabled={isLoading} 
+              className="p-2.5 bg-[#FBF8F4] border border-[#EFE6DA] rounded-xl text-[#7A6558] hover:text-[#7B1618] transition-all cursor-pointer shadow-sm flex-shrink-0"
+              title="Perbarui Data"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
-            <button onClick={() => setCurrentTab && setCurrentTab('home')} className="flex items-center gap-2 px-4 py-2.5 bg-maroon hover:bg-maroon-dark text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer">
+            <button 
+              onClick={() => setCurrentTab && setCurrentTab('home')} 
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#7B1618] hover:bg-[#5A0E10] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+            >
               <Eye className="w-3.5 h-3.5" /> Lihat Website
             </button>
-            <button onClick={() => setIsAdmin(false)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#EFE6DA] rounded-xl text-xs font-bold text-[#7A6558] hover:text-red-700 transition-all shadow-sm">
+            <button 
+              onClick={() => setIsAdmin(false)} 
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#FBF8F4] border border-[#EFE6DA] rounded-xl text-xs font-bold text-[#7A6558] hover:text-red-700 transition-all cursor-pointer"
+            >
               <LogOut className="w-3.5 h-3.5" /> Keluar Sesi
             </button>
           </div>
