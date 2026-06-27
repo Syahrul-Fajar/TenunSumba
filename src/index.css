@@ -23,7 +23,7 @@ body {
 
 /* ── Komponen Modular ─────────────────────────────────────────────────────── */
 .text-gradient {
-  background: linear-gradient(135deg, #7B1618 0%, #9A1F22 50%, #5A0E10 100%);
+  background: linear-gradient(135deg, #7B1618 0%, #C8973A 55%, #E0B060 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
