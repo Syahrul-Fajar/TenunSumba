@@ -115,7 +115,7 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
                     placeholder="Cari nama atau SKU..." 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-[#FBF8F4] border border-[#EFE6DA] rounded-xl text-sm text-[#3D1A0A] placeholder-gray-400 focus:outline-none focus:border-[#C8973A] transition-colors"
+                    className="w-full pl-11 pr-4 py-3 bg-[#FBF8F4] border border-[#EFE6DA] rounded-xl text-sm text-[#3D1A0A] placeholder-[#9E8B7A] focus:outline-none focus:border-[#C8973A] transition-colors"
                   />
                 </div>
               </div>

@@ -36,7 +36,7 @@ export default function ContactView() {
     }
   };
 
-  const inputCls = 'w-full px-4 py-3 text-sm bg-white border border-[#EFE6DA] rounded-xl focus:outline-none focus:border-[#C8973A] transition-all text-[#3D1A0A] placeholder-gray-400';
+  const inputCls = 'w-full px-4 py-3 text-sm bg-white border border-[#EFE6DA] rounded-xl focus:outline-none focus:border-[#C8973A] transition-all text-[#3D1A0A] placeholder-[#9E8B7A]';
 
   return (
     <div id="contact-view" className="animate-fade-in pt-24 pb-20 min-h-screen">

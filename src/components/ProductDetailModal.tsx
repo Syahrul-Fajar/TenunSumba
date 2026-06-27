@@ -106,7 +106,7 @@ export default function ProductDetailModal({ product, onClose, onAddToCart }: Pr
               <button 
                 onClick={handleAdd} 
                 disabled={isOutOfStock} 
-                className={`w-full flex justify-center gap-2 py-4 text-sm font-bold text-white rounded-xl transition-all ${isOutOfStock ? 'bg-gray-400 cursor-not-allowed' : 'btn-primary'}`}
+                className={`w-full flex justify-center gap-2 py-4 text-sm font-bold text-white rounded-xl transition-all ${isOutOfStock ? 'bg-[#C8B8A6] cursor-not-allowed' : 'btn-primary'}`}
               >
                 <ShoppingBag className="w-5 h-5" /> {isOutOfStock ? 'Stok Habis' : 'Masukkan ke Keranjang'}
               </button>

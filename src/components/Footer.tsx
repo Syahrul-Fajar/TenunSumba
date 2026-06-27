@@ -36,7 +36,7 @@ export default function Footer({ setCurrentTab }: FooterProps) {
                 <span className="block text-[10px] font-mono text-[#E0B060] uppercase tracking-widest">Tenun Ikat Sumba</span>
               </div>
             </button>
-            <p className="text-sm text-gray-400 leading-relaxed max-w-xs">
+            <p className="text-sm text-[#B5A595] leading-relaxed max-w-xs">
               Melestarikan warisan budaya tenun ikat Sumba sambil memberdayakan perempuan penenun lokal melalui karya otentik berkualitas tinggi.
             </p>
             <div className="flex gap-3 pt-1">
@@ -45,7 +45,7 @@ export default function Footer({ setCurrentTab }: FooterProps) {
                 { href: '#', icon: <Instagram className="w-4 h-4"/>, label: 'Instagram' },
                 { href: 'https://wa.me/6289542177009', icon: <MessageCircle className="w-4 h-4"/>, label: 'WhatsApp' },
               ].map(s => (
-                <a key={s.label} href={s.href} target="_blank" rel="noreferrer" className="w-9 h-9 flex items-center justify-center rounded-xl border border-white/10 text-gray-400 hover:border-[#C8973A] hover:text-[#C8973A] hover:bg-[#C8973A]/10 transition-all shadow-sm">
+                <a key={s.label} href={s.href} target="_blank" rel="noreferrer" className="w-9 h-9 flex items-center justify-center rounded-xl border border-white/10 text-[#B5A595] hover:border-[#C8973A] hover:text-[#C8973A] hover:bg-[#C8973A]/10 transition-all shadow-sm">
                   {s.icon}
                 </a>
               ))}
@@ -54,11 +54,11 @@ export default function Footer({ setCurrentTab }: FooterProps) {
 
           {/* Kolom Navigasi */}
           <div className="space-y-4">
-            <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-gray-500">Akses Cepat</h4>
+            <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-[#9E8B7A]">Akses Cepat</h4>
             <ul className="space-y-3">
               {links.map(l => (
                 <li key={l.tab}>
-                  <button onClick={() => go(l.tab)} className="text-sm text-gray-400 hover:text-[#E0B060] transition-colors flex items-center gap-2 group cursor-pointer">
+                  <button onClick={() => go(l.tab)} className="text-sm text-[#B5A595] hover:text-[#E0B060] transition-colors flex items-center gap-2 group cursor-pointer">
                     <span className="w-1 h-1 rounded-full bg-white/20 group-hover:bg-[#E0B060] transition-colors shadow-[0_0_5px_rgba(224,176,96,0)] group-hover:shadow-[0_0_5px_rgba(224,176,96,0.5)]" />
                     {l.label}
                   </button>
@@ -69,23 +69,23 @@ export default function Footer({ setCurrentTab }: FooterProps) {
 
           {/* Kolom Kontak */}
           <div className="space-y-4">
-            <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-gray-500">Hubungi Balai</h4>
+            <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-[#9E8B7A]">Hubungi Balai</h4>
             <ul className="space-y-4">
               <li className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 text-[#C8973A] flex-shrink-0 mt-0.5" />
-                <span className="text-sm text-gray-400 leading-relaxed">
+                <span className="text-sm text-[#B5A595] leading-relaxed">
                   Jln. Bulgur No. 12, Langgalero,<br/>Tambolaka, Sumba Barat Daya, NTT
                 </span>
               </li>
               <li className="flex items-center gap-3">
                 <Phone className="w-4 h-4 text-[#C8973A] flex-shrink-0" />
-                <a href="tel:+6289542177009" className="text-sm text-gray-400 hover:text-[#E0B060] transition-colors font-mono">
+                <a href="tel:+6289542177009" className="text-sm text-[#B5A595] hover:text-[#E0B060] transition-colors font-mono">
                   +62 895-4217-7009
                 </a>
               </li>
               <li className="flex items-center gap-3">
                 <Mail className="w-4 h-4 text-[#C8973A] flex-shrink-0" />
-                <a href="mailto:balaitenunseraphine@gmail.com" className="text-sm text-gray-400 hover:text-[#E0B060] transition-colors font-mono break-all">
+                <a href="mailto:balaitenunseraphine@gmail.com" className="text-sm text-[#B5A595] hover:text-[#E0B060] transition-colors font-mono break-all">
                   balaitenunseraphine@gmail.com
                 </a>
               </li>
@@ -96,7 +96,7 @@ export default function Footer({ setCurrentTab }: FooterProps) {
 
       {/* Baris Hak Cipta */}
       <div className="border-t border-white/5 py-5 bg-black/20">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-gray-500 font-mono tracking-wide">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-[#9E8B7A] font-mono tracking-wide">
           <p>© {new Date().getFullYear()} CD Seraphine Weetebula. Hak Cipta Dilindungi.</p>
           <p className="flex items-center gap-1">Ditenun dengan <span className="text-red-500">❤</span> di Sumba, Indonesia.</p>
         </div>
