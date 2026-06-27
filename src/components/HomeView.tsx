@@ -38,11 +38,11 @@ export default function HomeView({ setCurrentTab, onSelectProduct, products = []
       <section className="relative flex items-center justify-center min-h-screen overflow-hidden pt-20">
         <div className="absolute inset-0 z-0 bg-black">
           <img 
-            src="https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=1920&q=80" 
+            src="/tenun_sumba_hero.png" 
             alt="Tenun Ikat Sumba Background" 
-            className="w-full h-full object-cover opacity-50 object-top"
+            className="w-full h-full object-cover opacity-35 object-top"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/40 to-[#FBF8F4]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/50 to-[#FBF8F4]" />
         </div>
 
         <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
@@ -124,7 +124,7 @@ export default function HomeView({ setCurrentTab, onSelectProduct, products = []
               Menyinkronkan Database Motif...
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {featured.map(p => (
                 <div 
                   key={p.id} 
@@ -139,8 +139,8 @@ export default function HomeView({ setCurrentTab, onSelectProduct, products = []
                     />
                     
                     {p.isFeatured && (
-                      <div className="absolute top-4 left-4 bg-gradient-to-r from-[#C8973A] to-[#E0B060] text-white text-[9px] font-bold font-mono uppercase tracking-widest px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
-                        <Star className="w-3 h-3 fill-white" /> Premium
+                      <div className="absolute top-3 left-3 sm:top-4 sm:left-4 bg-gradient-to-r from-[#C8973A] to-[#E0B060] text-[#1C0808] text-[8px] sm:text-[9px] font-bold font-mono uppercase tracking-widest px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full flex items-center gap-1 sm:gap-1.5 shadow-md">
+                        <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-[#1C0808]" /> Premium
                       </div>
                     )}
                     
@@ -151,13 +151,13 @@ export default function HomeView({ setCurrentTab, onSelectProduct, products = []
                     </div>
                   </div>
                   
-                  <div className="p-6 flex-1 flex flex-col bg-white">
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-[#C8973A] mb-2">{p.category}</span>
-                    <h3 className="font-serif font-bold text-[#3D1A0A] leading-snug line-clamp-2 mb-4 flex-1">{p.title}</h3>
-                    <div className="pt-4 border-t border-[#EFE6DA] flex justify-between items-center">
-                      <p className="font-bold text-lg text-[#7B1618] font-mono">{fmt(p.price)}</p>
-                      <div className="w-8 h-8 rounded-full bg-[#FBF8F4] flex items-center justify-center group-hover:bg-[#7B1618] group-hover:text-white transition-colors text-[#7B1618]">
-                        <ArrowRight className="w-4 h-4" />
+                  <div className="p-3.5 sm:p-6 flex-1 flex flex-col bg-white">
+                    <span className="text-[8px] sm:text-[10px] font-mono uppercase tracking-widest text-[#C8973A] mb-1.5">{p.category}</span>
+                    <h3 className="font-serif font-bold text-xs sm:text-sm md:text-base text-[#3D1A0A] leading-snug line-clamp-2 mb-3 flex-1">{p.title}</h3>
+                    <div className="pt-3 border-t border-[#EFE6DA] flex justify-between items-center">
+                      <p className="font-bold text-xs sm:text-sm md:text-base text-[#7B1618] font-mono">{fmt(p.price)}</p>
+                      <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#FBF8F4] flex items-center justify-center group-hover:bg-[#7B1618] group-hover:text-white transition-colors text-[#7B1618]">
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </div>
                     </div>
                   </div>
