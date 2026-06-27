@@ -33,7 +33,7 @@ export default function Footer({ setCurrentTab }: FooterProps) {
               </div>
               <div className="text-left">
                 <span className="block font-serif text-base font-bold leading-tight text-white">CD Seraphine</span>
-                <span className="block text-[10px] font-mono text-[#E0B060] uppercase tracking-widest">Tenun Ikat Sumba</span>
+                <span className="block text-[10px] font-mono text-[#9A1F22] uppercase tracking-widest">Tenun Ikat Sumba</span>
               </div>
             </button>
             <p className="text-sm text-[#B5A595] leading-relaxed max-w-xs">
@@ -45,7 +45,7 @@ export default function Footer({ setCurrentTab }: FooterProps) {
                 { href: '#', icon: <Instagram className="w-4 h-4"/>, label: 'Instagram' },
                 { href: 'https://wa.me/6289542177009', icon: <MessageCircle className="w-4 h-4"/>, label: 'WhatsApp' },
               ].map(s => (
-                <a key={s.label} href={s.href} target="_blank" rel="noreferrer" className="w-9 h-9 flex items-center justify-center rounded-xl border border-white/10 text-[#B5A595] hover:border-[#C8973A] hover:text-[#C8973A] hover:bg-[#C8973A]/10 transition-all shadow-sm">
+                <a key={s.label} href={s.href} target="_blank" rel="noreferrer" className="w-9 h-9 flex items-center justify-center rounded-xl border border-white/10 text-[#B5A595] hover:border-[#7B1618] hover:text-[#7B1618] hover:bg-[#7B1618]/10 transition-all shadow-sm">
                   {s.icon}
                 </a>
               ))}
@@ -58,8 +58,8 @@ export default function Footer({ setCurrentTab }: FooterProps) {
             <ul className="space-y-3">
               {links.map(l => (
                 <li key={l.tab}>
-                  <button onClick={() => go(l.tab)} className="text-sm text-[#B5A595] hover:text-[#E0B060] transition-colors flex items-center gap-2 group cursor-pointer">
-                    <span className="w-1 h-1 rounded-full bg-white/20 group-hover:bg-[#E0B060] transition-colors shadow-[0_0_5px_rgba(224,176,96,0)] group-hover:shadow-[0_0_5px_rgba(224,176,96,0.5)]" />
+                  <button onClick={() => go(l.tab)} className="text-sm text-[#B5A595] hover:text-[#9A1F22] transition-colors flex items-center gap-2 group cursor-pointer">
+                    <span className="w-1 h-1 rounded-full bg-white/20 group-hover:bg-[#9A1F22] transition-colors shadow-[0_0_5px_rgba(224,176,96,0)] group-hover:shadow-[0_0_5px_rgba(224,176,96,0.5)]" />
                     {l.label}
                   </button>
                 </li>
@@ -72,20 +72,20 @@ export default function Footer({ setCurrentTab }: FooterProps) {
             <h4 className="text-xs font-mono font-bold uppercase tracking-widest text-[#9E8B7A]">Hubungi Balai</h4>
             <ul className="space-y-4">
               <li className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 text-[#C8973A] flex-shrink-0 mt-0.5" />
+                <MapPin className="w-4 h-4 text-[#7B1618] flex-shrink-0 mt-0.5" />
                 <span className="text-sm text-[#B5A595] leading-relaxed">
                   Jln. Bulgur No. 12, Langgalero,<br/>Tambolaka, Sumba Barat Daya, NTT
                 </span>
               </li>
               <li className="flex items-center gap-3">
-                <Phone className="w-4 h-4 text-[#C8973A] flex-shrink-0" />
-                <a href="tel:+6289542177009" className="text-sm text-[#B5A595] hover:text-[#E0B060] transition-colors font-mono">
+                <Phone className="w-4 h-4 text-[#7B1618] flex-shrink-0" />
+                <a href="tel:+6289542177009" className="text-sm text-[#B5A595] hover:text-[#9A1F22] transition-colors font-mono">
                   +62 895-4217-7009
                 </a>
               </li>
               <li className="flex items-center gap-3">
-                <Mail className="w-4 h-4 text-[#C8973A] flex-shrink-0" />
-                <a href="mailto:balaitenunseraphine@gmail.com" className="text-sm text-[#B5A595] hover:text-[#E0B060] transition-colors font-mono break-all">
+                <Mail className="w-4 h-4 text-[#7B1618] flex-shrink-0" />
+                <a href="mailto:balaitenunseraphine@gmail.com" className="text-sm text-[#B5A595] hover:text-[#9A1F22] transition-colors font-mono break-all">
                   balaitenunseraphine@gmail.com
                 </a>
               </li>

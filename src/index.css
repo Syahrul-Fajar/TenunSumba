@@ -8,14 +8,14 @@
 
   --color-maroon: #7B1618;
   --color-maroon-dark: #5A0E10;
-  --color-cream-dark: #EFE6DA;
-  --color-brand-cream: #FBF8F4;
+  --color-cream-dark: #F1F5F9;
+  --color-brand-cream: #FFFFFF;
 }
 
 /* ── Reset & Base Theme ───────────────────────────────────────────────────── */
 body {
-  background-color: #FBF8F4; /* Krem Dasar */
-  color: #3D1A0A; /* Cokelat Gelap untuk Legibilitas Tinggi */
+  background-color: #FFFFFF; /* Putih Dasar */
+  color: #1A1A1A; /* Hitam Arang untuk Legibilitas Tinggi */
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
@@ -23,7 +23,7 @@ body {
 
 /* ── Komponen Modular ─────────────────────────────────────────────────────── */
 .text-gradient {
-  background: linear-gradient(135deg, #7B1618 0%, #C8973A 55%, #E0B060 100%);
+  background: linear-gradient(135deg, #7B1618 0%, #9A1F22 50%, #5A0E10 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -38,14 +38,14 @@ body {
 }
 
 .card-base {
-  @apply bg-white border border-[#EFE6DA] rounded-2xl shadow-sm hover:shadow-md transition-shadow;
+  @apply bg-white border border-[#F1F5F9] rounded-2xl shadow-sm hover:shadow-md transition-shadow;
 }
 
 /* ── Scrollbar Estetik ────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #FBF8F4; }
-::-webkit-scrollbar-thumb { background: #C8973A80; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #C8973A; }
+::-webkit-scrollbar-track { background: #FFFFFF; }
+::-webkit-scrollbar-thumb { background: #7B161840; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #7B1618; }
 
 /* ── Animasi Performa GPU ─────────────────────────────────────────────────── */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

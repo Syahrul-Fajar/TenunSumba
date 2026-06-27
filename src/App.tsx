@@ -204,7 +204,7 @@ export default function App() {
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 
   return (
-    <div id="app-root" className="min-h-screen flex flex-col bg-[#FBF8F4] text-[#3D1A0A] font-sans selection:bg-[#C8973A] selection:text-white transition-colors duration-300">
+    <div id="app-root" className="min-h-screen flex flex-col bg-[#FFFFFF] text-[#1A1A1A] font-sans selection:bg-[#7B1618] selection:text-white transition-colors duration-300">
       
       {isPublicView && (
         <Header 
@@ -235,17 +235,17 @@ export default function App() {
       {isCartOpen && (
         <>
           <div onClick={() => setIsCartOpen(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] animate-fade-in" />
-          <div className="fixed inset-y-0 right-0 z-[200] w-full max-w-md bg-[#FBF8F4] border-l border-[#EFE6DA] shadow-2xl flex flex-col animate-slide-in">
+          <div className="fixed inset-y-0 right-0 z-[200] w-full max-w-md bg-[#FFFFFF] border-l border-[#F1F5F9] shadow-2xl flex flex-col animate-slide-in">
             
             {/* Header Drawer */}
-            <div className="flex items-center justify-between p-5 bg-white border-b border-[#EFE6DA]">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-[#7B1618]" />
-                <h3 className="font-serif text-lg font-bold text-[#3D1A0A]">
+                <h3 className="font-serif text-lg font-bold text-[#1A1A1A]">
                   {isCheckoutMode ? 'Verifikasi Pengiriman' : 'Keranjang Belanja'}
                 </h3>
               </div>
-              <button onClick={() => setIsCartOpen(false)} className="text-[#7A6558] hover:text-[#7B1618]"><X className="w-5 h-5"/></button>
+              <button onClick={() => setIsCartOpen(false)} className="text-[#64748B] hover:text-[#7B1618]"><X className="w-5 h-5"/></button>
             </div>
 
             {/* Content Body */}
@@ -255,8 +255,8 @@ export default function App() {
                   <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 mb-4 animate-scale-in">
                     <CheckCircle2 className="w-9 h-9" />
                   </div>
-                  <h4 className="font-serif text-xl font-bold text-[#3D1A0A] mb-2">Pemesanan Sukses!</h4>
-                  <p className="text-xs text-[#7A6558] max-w-xs mx-auto">
+                  <h4 className="font-serif text-xl font-bold text-[#1A1A1A] mb-2">Pemesanan Sukses!</h4>
+                  <p className="text-xs text-[#64748B] max-w-xs mx-auto">
                     Karya tenun eksklusif Anda telah dipesan. Kami akan segera menghubungi Anda melalui WhatsApp. Jendela ini akan tertutup otomatis.
                   </p>
                 </div>
@@ -265,11 +265,11 @@ export default function App() {
                   <button 
                     type="button" 
                     onClick={() => setIsCheckoutMode(false)} 
-                    className="flex items-center gap-1.5 text-xs font-bold text-[#C8973A] hover:text-[#7B1618] uppercase tracking-wider mb-2"
+                    className="flex items-center gap-1.5 text-xs font-bold text-[#7B1618] hover:text-[#7B1618] uppercase tracking-wider mb-2"
                   >
                     &larr; Kembali ke Keranjang
                   </button>
-                  <p className="text-xs text-[#7A6558] mb-4">Lengkapi informasi berikut untuk melanjutkan pengiriman mahakarya Anda.</p>
+                  <p className="text-xs text-[#64748B] mb-4">Lengkapi informasi berikut untuk melanjutkan pengiriman mahakarya Anda.</p>
                   
                   {orderError && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-600 flex items-center gap-2">
@@ -278,59 +278,59 @@ export default function App() {
                   )}
 
                   <div>
-                    <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-[#7A6558] mb-1.5">Nama Penerima Lengkap *</label>
+                    <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Nama Penerima Lengkap *</label>
                     <input 
                       type="text" 
                       required 
                       value={checkoutForm.name} 
                       onChange={e => setCheckoutForm({...checkoutForm, name: e.target.value})}
-                      className="w-full px-4 py-2.5 text-sm bg-white border border-[#EFE6DA] rounded-xl text-[#3D1A0A] focus:outline-none focus:border-[#C8973A] transition-colors"
+                      className="w-full px-4 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl text-[#1A1A1A] focus:outline-none focus:border-[#7B1618] transition-colors"
                       placeholder="Contoh: Budi Santoso"
                     />
                   </div>
                   <div>
-                    <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-[#7A6558] mb-1.5">WhatsApp / Nomor Telepon Aktif *</label>
+                    <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-[#64748B] mb-1.5">WhatsApp / Nomor Telepon Aktif *</label>
                     <input 
                       type="tel" 
                       required 
                       value={checkoutForm.phone} 
                       onChange={e => setCheckoutForm({...checkoutForm, phone: e.target.value})}
-                      className="w-full px-4 py-2.5 text-sm bg-white border border-[#EFE6DA] rounded-xl text-[#3D1A0A] focus:outline-none focus:border-[#C8973A] transition-colors"
+                      className="w-full px-4 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl text-[#1A1A1A] focus:outline-none focus:border-[#7B1618] transition-colors"
                       placeholder="Contoh: 081234567890"
                     />
                   </div>
                   <div>
-                    <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-[#7A6558] mb-1.5">Alamat Lengkap Pengiriman *</label>
+                    <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Alamat Lengkap Pengiriman *</label>
                     <textarea 
                       required 
                       rows={4}
                       value={checkoutForm.address} 
                       onChange={e => setCheckoutForm({...checkoutForm, address: e.target.value})}
-                      className="w-full px-4 py-2.5 text-sm bg-white border border-[#EFE6DA] rounded-xl text-[#3D1A0A] focus:outline-none focus:border-[#C8973A] transition-colors resize-none"
+                      className="w-full px-4 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl text-[#1A1A1A] focus:outline-none focus:border-[#7B1618] transition-colors resize-none"
                       placeholder="Contoh: Jl. Diponegoro No. 45, Kecamatan Tambolaka, Kabupaten Sumba Barat Daya, NTT"
                     />
                   </div>
                 </form>
               ) : cartItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center text-[#7A6558]">
+                <div className="flex flex-col items-center justify-center py-20 text-center text-[#64748B]">
                   <ShoppingBag className="w-12 h-12 mb-3 opacity-25" />
                   <p className="text-sm font-medium">Keranjang belanja Anda masih kosong.</p>
-                  <button onClick={() => { setIsCartOpen(false); changeTab('produk'); }} className="mt-4 text-xs font-bold uppercase text-[#7B1618] hover:text-[#C8973A] underline">Mulai Belanja</button>
+                  <button onClick={() => { setIsCartOpen(false); changeTab('produk'); }} className="mt-4 text-xs font-bold uppercase text-[#7B1618] hover:text-[#7B1618] underline">Mulai Belanja</button>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {cartItems.map(item => (
-                    <div key={item.product.id} className="flex gap-4 p-3.5 bg-white border border-[#EFE6DA] rounded-2xl shadow-sm">
-                      <img src={item.product.image} alt={item.product.title} className="w-16 h-16 object-cover rounded-xl bg-[#F5EDE3]" />
+                    <div key={item.product.id} className="flex gap-4 p-3.5 bg-white border border-[#F1F5F9] rounded-2xl shadow-sm">
+                      <img src={item.product.image} alt={item.product.title} className="w-16 h-16 object-cover rounded-xl bg-[#F8FAFC]" />
                       <div className="flex-1 min-w-0">
                         <span className="text-[8px] font-mono text-gray-400 uppercase">{item.product.code}</span>
-                        <h4 className="font-serif font-bold text-xs text-[#3D1A0A] truncate">{item.product.title}</h4>
+                        <h4 className="font-serif font-bold text-xs text-[#1A1A1A] truncate">{item.product.title}</h4>
                         <p className="font-mono text-xs font-bold text-[#7B1618] mt-1">{formatPrice(item.product.price)}</p>
                         
                         <div className="flex items-center justify-between mt-2.5">
-                          <div className="flex items-center bg-[#FBF8F4] border border-[#EFE6DA] rounded-lg p-0.5">
+                          <div className="flex items-center bg-[#FFFFFF] border border-[#F1F5F9] rounded-lg p-0.5">
                             <button onClick={() => updateCartQuantity(item.product.id, item.quantity - 1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold">-</button>
-                            <span className="w-6 text-center font-bold text-xs text-[#3D1A0A]">{item.quantity}</span>
+                            <span className="w-6 text-center font-bold text-xs text-[#1A1A1A]">{item.quantity}</span>
                             <button onClick={() => updateCartQuantity(item.product.id, item.quantity + 1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold">+</button>
                           </div>
                           
@@ -347,9 +347,9 @@ export default function App() {
 
             {/* Footer Summary / Checkout Trigger */}
             {cartItems.length > 0 && !orderSuccess && (
-              <div className="p-5 bg-white border-t border-[#EFE6DA] space-y-4">
+              <div className="p-5 bg-white border-t border-[#F1F5F9] space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-[#7A6558]">Total Pembayaran</span>
+                  <span className="text-xs font-bold text-[#64748B]">Total Pembayaran</span>
                   <span className="text-lg font-bold text-[#7B1618] font-mono">{formatPrice(totalCartPrice)}</span>
                 </div>
                 
