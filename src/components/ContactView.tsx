@@ -134,7 +134,7 @@ export default function ContactView() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-[#7A6558] mb-2">Nama Lengkap *</label>
-                    <input type="text" name="name" required value={formData.name} onChange={handleChange} className={inputCls} placeholder="Cth: Adhwa Nissa" />
+                    <input type="text" name="name" required value={formData.name} onChange={handleChange} className={inputCls} placeholder="Contoh: Farsy Suminu" />
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-[#7A6558] mb-2">Alamat Email *</label>

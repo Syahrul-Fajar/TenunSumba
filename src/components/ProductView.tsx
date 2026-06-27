@@ -26,12 +26,13 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
+      if (!isAdmin && p.status === 'nonaktif') return false;
       const matchSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           p.code.toLowerCase().includes(searchQuery.toLowerCase());
       const matchCategory = activeCategory === 'Semua Kategori' || p.category === activeCategory;
       return matchSearch && matchCategory;
     });
-  }, [products, searchQuery, activeCategory]);
+  }, [products, searchQuery, activeCategory, isAdmin]);
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,10 +156,9 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
               <div className="card-base py-20 flex flex-col items-center justify-center text-[#7A6558] border-dashed">
                 <Search className="w-10 h-10 mb-3 opacity-30 text-[#3D1A0A]" />
                 <p className="font-mono text-sm tracking-wide">Motif atau produk tidak ditemukan dalam arsip.</p>
-                <button onClick={() => {setSearchQuery(''); setActiveCategory('Semua Kategori');}} className="mt-4 text-[#C8973A] hover:text-[#7B1618] text-xs font-bold underline">Reset Filter</button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {filteredProducts.map(p => (
                   <div 
                     key={p.id} 
@@ -170,11 +170,11 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
                       <div className="absolute inset-0 bg-gradient-to-t from-[#1C0808]/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                       
                       {p.isFeatured && (
-                        <div className="absolute top-4 left-4 bg-gradient-to-r from-[#C8973A] to-[#E0B060] text-white text-[9px] font-bold font-mono uppercase tracking-widest px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
-                          <Star className="w-3 h-3 fill-white" /> Edisi Spesial
+                        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 bg-gradient-to-r from-[#C8973A] to-[#E0B060] text-[#1C0808] text-[8px] sm:text-[9px] font-bold font-mono uppercase tracking-widest px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full flex items-center gap-1 sm:gap-1.5 shadow-md">
+                          <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-[#1C0808]" /> Edisi Spesial
                         </div>
                       )}
-
+ 
                       <div className="absolute bottom-4 left-4 right-4 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
                         <span className="bg-white/95 text-[#3D1A0A] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-between shadow-lg">
                           Analisis Visual <ArrowRight className="w-4 h-4 text-[#C8973A]"/>
@@ -182,15 +182,15 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
                       </div>
                     </div>
                     
-                    <div className="p-5 flex-1 flex flex-col border-t border-[#EFE6DA] bg-white">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-[#C8973A]">{p.category}</span>
-                        <span className="text-[10px] font-mono text-[#7A6558]">{p.code}</span>
+                    <div className="p-3.5 sm:p-5 flex-1 flex flex-col border-t border-[#EFE6DA] bg-white">
+                      <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                        <span className="text-[8px] sm:text-[10px] font-mono uppercase tracking-widest text-[#C8973A] truncate">{p.category}</span>
+                        <span className="text-[8px] sm:text-[10px] font-mono text-[#7A6558] flex-shrink-0">{p.code}</span>
                       </div>
-                      <h3 className="font-serif font-bold text-[#3D1A0A] leading-snug line-clamp-2 mb-4 flex-1">{p.title}</h3>
+                      <h3 className="font-serif font-bold text-xs sm:text-sm md:text-base text-[#3D1A0A] leading-snug line-clamp-2 mb-3 flex-1">{p.title}</h3>
                       
-                      <div className="flex items-center justify-between pt-4 border-t border-[#EFE6DA]">
-                        <p className="font-bold text-[#7B1618] font-mono">{fmt(p.price)}</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t border-[#EFE6DA]">
+                        <p className="font-bold text-xs sm:text-sm md:text-base text-[#7B1618] font-mono">{fmt(p.price)}</p>
                         
                         {isAdmin && (
                           <div className="flex items-center gap-1.5 z-10" onClick={e => e.stopPropagation()}>

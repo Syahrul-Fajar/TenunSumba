@@ -1,9 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
-import { Product, ContactMessage, Order, Article } from '../types';
+import { Product, ContactMessage, Order, Article, OrderItem } from '../types';
 import { PRODUCTS } from '../data/products';
 
-const supabaseUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || '').trim();
+const rawSupabaseUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || '').trim();
 const supabaseAnonKey = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '').trim();
+
+const supabaseUrl = rawSupabaseUrl.endsWith('/rest/v1/')
+  ? rawSupabaseUrl.slice(0, -9)
+  : rawSupabaseUrl.endsWith('/rest/v1')
+    ? rawSupabaseUrl.slice(0, -8)
+    : rawSupabaseUrl;
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -90,23 +96,25 @@ export const dbService = {
     if (supabase) {
       try {
         const { data, error } = await supabase
-          .from('products')
+          .from('produk')
           .select('*')
           .order('created_at', { ascending: false });
         if (!error && data) {
           return data.map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            category: item.category,
-            price: Number(item.price),
-            image: item.image,
-            description: item.description,
-            isFeatured: item.is_featured ?? item.isFeatured,
-            code: item.code,
-            dimensions: item.dimensions,
-            weaver: item.weaver,
-            makingTime: item.making_time ?? item.makingTime,
-            stock: item.stock !== undefined ? Number(item.stock) : 5
+            id: String(item.id_produk),
+            title: item.nama_produk,
+            category: 'Kain Tenun',
+            price: Number(item.harga),
+            image: item.gambar,
+            description: item.deskripsi || '',
+            maknaMotif: item.makna_motif || '',
+            status: item.status || 'aktif',
+            isFeatured: false,
+            code: 'TIS-' + item.id_produk,
+            dimensions: '200 x 100 cm',
+            weaver: 'Mama Penenun',
+            makingTime: '3 Bulan',
+            stock: item.stok !== undefined && item.stok !== null ? Number(item.stok) : 5
           }));
         }
         console.warn('Supabase products fetch failed or table missing, utilizing LocalStorage fallback.', error);
@@ -119,34 +127,33 @@ export const dbService = {
 
   async saveProduct(product: Omit<Product, 'id'> & { id?: string }): Promise<Product> {
     const isNew = !product.id;
-    const finalId = product.id || 'prod_' + Math.random().toString(36).substring(2, 9);
-    const finalProduct: Product = { ...product, id: finalId } as Product;
+    let finalId = product.id || '';
 
     if (supabase) {
       try {
-        const payload = {
-          id: finalId,
-          title: product.title,
-          category: product.category,
-          price: product.price,
-          image: product.image,
-          description: product.description,
-          is_featured: product.isFeatured,
-          code: product.code,
-          dimensions: product.dimensions,
-          weaver: product.weaver,
-          making_time: product.makingTime,
-          stock: product.stock ?? 5
+        const payload: any = {
+          nama_produk: product.title,
+          harga: product.price,
+          gambar: product.image,
+          deskripsi: product.description || '',
+          makna_motif: product.maknaMotif || '',
+          status: product.status || 'aktif',
+          stok: product.stock ?? 5
         };
 
         let result;
         if (isNew) {
-          result = await supabase.from('products').insert([payload]);
+          result = await supabase.from('produk').insert([payload]).select();
+          if (!result.error && result.data && result.data[0]) {
+            finalId = String(result.data[0].id_produk);
+          }
         } else {
-          result = await supabase.from('products').update(payload).eq('id', finalId);
+          const queryId = !isNaN(Number(product.id)) ? Number(product.id) : product.id;
+          result = await supabase.from('produk').update(payload).eq('id_produk', queryId);
         }
 
         if (!result.error) {
+          const finalProduct: Product = { ...product, id: finalId } as Product;
           return finalProduct;
         }
         console.error('Supabase save failed, writing locally instead:', result.error);
@@ -156,11 +163,12 @@ export const dbService = {
     }
 
     // Save locally
+    const finalProduct: Product = { ...product, id: finalId || 'prod_' + Math.random().toString(36).substring(2, 9) } as Product;
     const list = localDb.getProducts();
     if (isNew) {
       list.unshift(finalProduct);
     } else {
-      const idx = list.findIndex((p) => p.id === finalId);
+      const idx = list.findIndex((p) => p.id === finalProduct.id);
       if (idx !== -1) {
         list[idx] = finalProduct;
       } else {
@@ -174,7 +182,8 @@ export const dbService = {
   async deleteProduct(id: string): Promise<boolean> {
     if (supabase) {
       try {
-        const { error } = await supabase.from('products').delete().eq('id', id);
+        const queryId = !isNaN(Number(id)) ? Number(id) : id;
+        const { error } = await supabase.from('produk').delete().eq('id_produk', queryId);
         if (!error) return true;
         console.error('Supabase delete product error:', error);
       } catch (err) {
@@ -188,20 +197,8 @@ export const dbService = {
     return true;
   },
 
-  // 2. INQUIRIES / CONTACT SERVICES (Database Pelanggan)
+  // 2. INQUIRIES / CONTACT SERVICES (Database Pelanggan - Routed entirely locally)
   async getInquiries(): Promise<any[]> {
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('inquiries')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (!error && data) return data;
-        console.warn('Supabase inquiries query error, using local storage fallback:', error);
-      } catch (err) {
-        console.error('Supabase connection error on inquiries, using local:', err);
-      }
-    }
     return localDb.getInquiries();
   },
 
@@ -218,16 +215,6 @@ export const dbService = {
       created_at: new Date().toISOString()
     };
 
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('inquiries').insert([payload]);
-        if (!error) return payload;
-        console.error('Supabase insert inquiry error, saving locally:', error);
-      } catch (err) {
-        console.error('Supabase insert inquiry exception, saving locally:', err);
-      }
-    }
-
     const list = localDb.getInquiries();
     list.unshift(payload);
     localDb.saveInquiries(list);
@@ -235,16 +222,6 @@ export const dbService = {
   },
 
   async updateInquiryStatus(id: string, status: 'baru' | 'dibaca' | 'selesai'): Promise<boolean> {
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('inquiries').update({ status }).eq('id', id);
-        if (!error) return true;
-        console.error('Supabase update status error:', error);
-      } catch (err) {
-        console.error('Supabase update status exception:', err);
-      }
-    }
-
     const list = localDb.getInquiries();
     const idx = list.findIndex((item: any) => item.id === id);
     if (idx !== -1) {
@@ -255,16 +232,6 @@ export const dbService = {
   },
 
   async deleteInquiry(id: string): Promise<boolean> {
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('inquiries').delete().eq('id', id);
-        if (!error) return true;
-        console.error('Supabase delete inquiry error:', error);
-      } catch (err) {
-        console.error('Supabase delete inquiry exception:', err);
-      }
-    }
-
     const list = localDb.getInquiries();
     const filtered = list.filter((item: any) => item.id !== id);
     localDb.saveInquiries(filtered);
@@ -276,25 +243,43 @@ export const dbService = {
     if (supabase) {
       try {
         const { data, error } = await supabase
-          .from('orders')
-          .select('*')
+          .from('pesanan')
+          .select('*, detail_pesanan(*, produk(*))')
           .order('created_at', { ascending: false });
         if (!error && data) {
-          return data.map((item: any) => ({
-            id: item.id,
-            customerName: item.customer_name ?? item.customerName,
-            customerEmail: item.customer_email ?? item.customerEmail,
-            customerPhone: item.customer_phone ?? item.customerPhone,
-            customerAddress: item.customer_address ?? item.customerAddress,
-            productId: item.product_id ?? item.productId,
-            productTitle: item.product_title ?? item.productTitle,
-            productCode: item.product_code ?? item.productCode,
-            price: Number(item.price),
-            quantity: Number(item.quantity),
-            totalPrice: Number(item.total_price ?? item.totalPrice),
-            status: item.status,
-            createdAt: item.created_at ?? item.createdAt
-          }));
+          return data.map((item: any) => {
+            const items: OrderItem[] = (item.detail_pesanan || []).map((det: any) => ({
+              productId: String(det.id_produk),
+              productTitle: det.produk ? det.produk.nama_produk : 'Kain Tenun Sumba',
+              productCode: 'TIS-' + det.id_produk,
+              price: Number(det.harga_satuan || 0),
+              quantity: Number(det.jumlah || 1)
+            }));
+
+            // Fallback for legacy orders
+            if (items.length === 0) {
+              items.push({
+                productId: 'TENUN-SUMBA',
+                productTitle: 'Kain Tenun Sumba',
+                productCode: 'TENUN-SUMBA',
+                price: Number(item.total_harga || 0),
+                quantity: 1
+              });
+            }
+
+            const parts = (item.catatan || '').split(' | ');
+            return {
+              id: String(item.id_pesanan),
+              customerName: parts[0] || 'Pelanggan Seraphine',
+              customerEmail: '—',
+              customerPhone: parts[1] || '—',
+              customerAddress: parts[2] || '—',
+              items,
+              totalPrice: Number(item.total_harga || 0),
+              status: item.status_pesanan || 'menunggu',
+              createdAt: item.created_at
+            };
+          });
         }
         console.warn('Supabase orders fetch failed or table missing, utilizing LocalStorage fallback.', error);
       } catch (err) {
@@ -305,46 +290,51 @@ export const dbService = {
   },
 
   async createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promise<Order> {
-    const finalId = 'ord_' + Math.random().toString(36).substring(2, 9);
+    let finalId = '';
     const createdAt = new Date().toISOString();
-    const finalOrder: Order = { ...order, id: finalId, createdAt };
 
     if (supabase) {
       try {
         const payload = {
-          id: finalId,
-          customer_name: order.customerName,
-          customer_email: order.customerEmail,
-          customer_phone: order.customerPhone,
-          customer_address: order.customerAddress,
-          product_id: order.productId,
-          product_title: order.productTitle,
-          product_code: order.productCode,
-          price: order.price,
-          quantity: order.quantity,
-          total_price: order.totalPrice,
-          status: order.status,
-          created_at: createdAt
+          total_harga: order.totalPrice,
+          status_pesanan: order.status || 'menunggu',
+          catatan: `${order.customerName} | ${order.customerPhone} | ${order.customerAddress}`
         };
-        const { error } = await supabase.from('orders').insert([payload]);
-        if (!error) {
-          // Deduct stock of the product if order is created successfully
-          await this.deductProductStock(order.productId, order.quantity);
+        const result = await supabase.from('pesanan').insert([payload]).select();
+        if (!result.error && result.data && result.data[0]) {
+          finalId = String(result.data[0].id_pesanan);
+          
+          // Insert items into detail_pesanan
+          for (const item of order.items) {
+            const detailPayload = {
+              id_pesanan: Number(finalId),
+              id_produk: Number(item.productId),
+              jumlah: item.quantity,
+              harga_satuan: item.price
+            };
+            await supabase.from('detail_pesanan').insert([detailPayload]);
+            await this.deductProductStock(item.productId, item.quantity);
+          }
+
+          const finalOrder: Order = { ...order, id: finalId, createdAt };
           return finalOrder;
         }
-        console.error('Supabase create order failed, writing locally instead:', error);
+        console.error('Supabase create order failed, writing locally instead:', result.error);
       } catch (err) {
         console.error('Supabase order write crash; saving locally:', err);
       }
     }
 
     // Save locally
+    const finalOrder: Order = { ...order, id: finalId || 'ord_' + Math.random().toString(36).substring(2, 9), createdAt };
     const list = localDb.getOrders();
     list.unshift(finalOrder);
     localDb.saveOrders(list);
 
     // Deduct stock locally
-    await this.deductProductStock(order.productId, order.quantity);
+    for (const item of order.items) {
+      await this.deductProductStock(item.productId, item.quantity);
+    }
     return finalOrder;
   },
 
@@ -365,7 +355,8 @@ export const dbService = {
   async updateOrderStatus(id: string, status: Order['status']): Promise<boolean> {
     if (supabase) {
       try {
-        const { error } = await supabase.from('orders').update({ status }).eq('id', id);
+        const queryId = !isNaN(Number(id)) ? Number(id) : id;
+        const { error } = await supabase.from('pesanan').update({ status_pesanan: status }).eq('id_pesanan', queryId);
         if (!error) return true;
         console.error('Supabase update order status error:', error);
       } catch (err) {
@@ -385,7 +376,8 @@ export const dbService = {
   async deleteOrder(id: string): Promise<boolean> {
     if (supabase) {
       try {
-        const { error } = await supabase.from('orders').delete().eq('id', id);
+        const queryId = !isNaN(Number(id)) ? Number(id) : id;
+        const { error } = await supabase.from('pesanan').delete().eq('id_pesanan', queryId);
         if (!error) return true;
         console.error('Supabase delete order error:', error);
       } catch (err) {
@@ -404,19 +396,18 @@ export const dbService = {
     if (supabase) {
       try {
         const { data, error } = await supabase
-          .from('articles')
-          .select('*')
-          .order('created_at', { ascending: false });
+          .from('artikel')
+          .select('*');
         if (!error && data) {
           return data.map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            slug: item.slug,
-            content: item.content,
-            excerpt: item.excerpt,
-            author: item.author,
-            image: item.image,
-            createdAt: item.created_at ?? item.createdAt
+            id: String(item.id_artikel),
+            title: item.judul,
+            slug: item.judul.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            content: item.konten,
+            excerpt: item.konten.substring(0, 100) + '...',
+            author: 'Admin',
+            image: item.thumbnail || '',
+            createdAt: new Date().toISOString()
           }));
         }
         console.warn('Supabase articles fetch failed or table missing, utilizing LocalStorage fallback.', error);
@@ -429,31 +420,30 @@ export const dbService = {
 
   async saveArticle(article: Omit<Article, 'id' | 'createdAt'> & { id?: string }): Promise<Article> {
     const isNew = !article.id;
-    const finalId = article.id || 'art_' + Math.random().toString(36).substring(2, 9);
+    let finalId = article.id || '';
     const createdAt = new Date().toISOString();
-    const finalArticle: Article = { ...article, id: finalId, createdAt: isNew ? createdAt : (article as any).createdAt || createdAt };
 
     if (supabase) {
       try {
-        const payload = {
-          id: finalId,
-          title: article.title,
-          slug: article.slug || article.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-          content: article.content,
-          excerpt: article.excerpt,
-          author: article.author || 'Admin',
-          image: article.image,
-          created_at: finalArticle.createdAt
+        const payload: any = {
+          judul: article.title,
+          konten: article.content,
+          thumbnail: article.image
         };
 
         let result;
         if (isNew) {
-          result = await supabase.from('articles').insert([payload]);
+          result = await supabase.from('artikel').insert([payload]).select();
+          if (!result.error && result.data && result.data[0]) {
+            finalId = String(result.data[0].id_artikel);
+          }
         } else {
-          result = await supabase.from('articles').update(payload).eq('id', finalId);
+          const queryId = !isNaN(Number(article.id)) ? Number(article.id) : article.id;
+          result = await supabase.from('artikel').update(payload).eq('id_artikel', queryId);
         }
 
         if (!result.error) {
+          const finalArticle: Article = { ...article, id: finalId, createdAt: isNew ? createdAt : (article as any).createdAt || createdAt };
           return finalArticle;
         }
         console.error('Supabase save article failed, writing locally instead:', result.error);
@@ -463,11 +453,12 @@ export const dbService = {
     }
 
     // Save locally
+    const finalArticle: Article = { ...article, id: finalId || 'art_' + Math.random().toString(36).substring(2, 9), createdAt: isNew ? createdAt : (article as any).createdAt || createdAt };
     const list = localDb.getArticles();
     if (isNew) {
       list.unshift(finalArticle);
     } else {
-      const idx = list.findIndex((a) => a.id === finalId);
+      const idx = list.findIndex((a) => a.id === finalArticle.id);
       if (idx !== -1) {
         list[idx] = finalArticle;
       } else {
@@ -481,7 +472,8 @@ export const dbService = {
   async deleteArticle(id: string): Promise<boolean> {
     if (supabase) {
       try {
-        const { error } = await supabase.from('articles').delete().eq('id', id);
+        const queryId = !isNaN(Number(id)) ? Number(id) : id;
+        const { error } = await supabase.from('artikel').delete().eq('id_artikel', queryId);
         if (!error) return true;
         console.error('Supabase delete article error:', error);
       } catch (err) {

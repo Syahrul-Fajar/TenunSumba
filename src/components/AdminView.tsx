@@ -5,12 +5,13 @@ import {
   ShoppingCart, MessageSquare, BarChart3, Layers, Eye, Phone, LogOut, Wifi, WifiOff, Star, BookOpen
 } from 'lucide-react';
 import { Product, Order, Article } from '../types';
-import { dbService, isSupabaseConfigured } from '../lib/supabase';
+import { dbService, isSupabaseConfigured, supabase } from '../lib/supabase';
 
 interface AdminViewProps {
   onRefresh?: () => void;
   isAdmin: boolean;
   setIsAdmin: (val: boolean) => void;
+  setCurrentTab?: (tab: 'home' | 'produk' | 'edukasi' | 'kontak' | 'admin') => void;
 }
 
 // ─── Utility Formatters ──────────────────────────────────────────────────────
@@ -25,11 +26,10 @@ const formatDateTime = (s: string) =>
 
 // ─── Configuration Constants ────────────────────────────────────────────────
 const STATUS_PESANAN: Record<string, { label: string; cls: string }> = {
-  baru:       { label: 'Baru',       cls: 'bg-rose-100 text-rose-800 border-rose-200' },
-  diproses:   { label: 'Diproses',   cls: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  menunggu:   { label: 'Menunggu',   cls: 'bg-rose-100 text-rose-800 border-rose-200' },
   dikirim:    { label: 'Dikirim',    cls: 'bg-amber-100 text-amber-800 border-amber-200' },
   selesai:    { label: 'Selesai',    cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  dibatalkan: { label: 'Dibatalkan', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  batal:      { label: 'Dibatalkan', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
 };
 
 const STATUS_PESAN: Record<string, { label: string; cls: string }> = {
@@ -76,7 +76,7 @@ const TabBtn = ({
 );
 
 // ─── Main Component ──────────────────────────────────────────────────────────
-export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewProps) {
+export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTab }: AdminViewProps) {
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [authError, setAuthError]         = useState('');
@@ -130,7 +130,22 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
   }, [onRefresh]);
 
   useEffect(() => {
-    if (isAdmin) loadData();
+    if (!isAdmin) return;
+    loadData();
+
+    if (!isSupabaseConfigured || !supabase) return;
+
+    // Listen to changes on all relevant tables to make the panel realtime
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'produk' }, () => { loadData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pesanan' }, () => { loadData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'artikel' }, () => { loadData(); })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isAdmin, loadData]);
 
   // ── Handler Functions ──────────────────────────────────────────────────────
@@ -148,11 +163,33 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: 'product' | 'article') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Ukuran berkas terlalu besar. Maksimum batas ukuran adalah 2 MB.');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        if (field === 'product' && editProd) {
+          setEditProd(prev => prev ? { ...prev, image: reader.result as string } : null);
+        } else if (field === 'article' && editArt) {
+          setEditArt(prev => prev ? { ...prev, image: reader.result as string } : null);
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveProd = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormErr('');
-    if (!editProd?.title || !editProd?.price || !editProd?.image || !editProd?.code) {
-      setFormErr('Harap isi semua kolom wajib (Nama, Harga, Kode, URL Gambar)');
+    if (!editProd?.title || !editProd?.price || !editProd?.image) {
+      setFormErr('Harap isi semua kolom wajib (Nama Kain, Harga, dan Foto Produk)');
       return;
     }
     setSavingProd(true);
@@ -164,8 +201,10 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
         price: Number(editProd.price),
         image: editProd.image!,
         description: editProd.description || '',
+        maknaMotif: editProd.maknaMotif || '',
+        status: editProd.status || 'aktif',
         isFeatured: editProd.isFeatured || false,
-        code: editProd.code!,
+        code: editProd.code || 'TIS-NEW',
         dimensions: editProd.dimensions || '',
         weaver: editProd.weaver || 'Penenun Sumba',
         makingTime: editProd.makingTime || '3 Bulan',
@@ -253,31 +292,14 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
   const metrics = useMemo(() => {
     const totalValuation = products.reduce((s, p) => s + p.price * (p.stock ?? 5), 0);
     const completedRevenue = orders.filter(o => o.status === 'selesai').reduce((s, o) => s + o.totalPrice, 0);
-    const activeOrders = orders.filter(o => ['baru', 'diproses', 'dikirim'].includes(o.status)).length;
+    const activeOrders = orders.filter(o => ['menunggu', 'dikirim'].includes(o.status)).length;
     const newMessages = inquiries.filter(m => m.status === 'baru').length;
     const lowStockProducts = products.filter(p => (p.stock ?? 5) <= 2);
     
     return { totalValuation, completedRevenue, activeOrders, newMessages, lowStockProducts };
   }, [products, orders, inquiries]);
 
-  const customerDb = useMemo(() => {
-    const registry: Record<string, any> = {};
-    orders.forEach(o => {
-      const key = (o.customerEmail || '').trim().toLowerCase() || (o.customerPhone || '').trim();
-      if (!key) return;
-      if (!registry[key]) {
-        registry[key] = { name: o.customerName, email: o.customerEmail || '-', phone: o.customerPhone || '-', address: o.customerAddress || '-', totalOrders: 0, totalSpend: 0, lastActivity: o.createdAt };
-      }
-      registry[key].totalOrders++;
-      registry[key].totalSpend += o.totalPrice;
-      if (new Date(o.createdAt) > new Date(registry[key].lastActivity)) {
-        registry[key].name = o.customerName;
-        registry[key].address = o.customerAddress;
-        registry[key].lastActivity = o.createdAt;
-      }
-    });
-    return Object.values(registry);
-  }, [orders]);
+
 
   const filteredOrders = useMemo(() => orderFilter === 'all' ? orders : orders.filter(o => o.status === orderFilter), [orders, orderFilter]);
   const filteredMessages = useMemo(() => msgFilter === 'all' ? inquiries : inquiries.filter(m => m.status === msgFilter), [inquiries, msgFilter]);
@@ -291,7 +313,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
             <div className="w-16 h-16 bg-maroon rounded-2xl flex items-center justify-center shadow-lg mb-4">
               <Lock className="w-7 h-7 text-white" />
             </div>
-            <h2 className="font-serif text-2xl font-bold">Portal Admin Workspace</h2>
+            <h2 className="font-serif text-2xl font-bold">Portal Administrasi Balai</h2>
             <p className="text-xs text-brand-gold-light font-mono uppercase tracking-widest mt-1">CD Seraphine Weetebula</p>
           </div>
 
@@ -303,13 +325,13 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
               </div>
             )}
             <div>
-              <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-white/50 mb-2">Username</label>
-              <input type="text" required placeholder="Username" value={adminUsername} onChange={e => setAdminUsername(e.target.value)} className="w-full px-4 py-3 text-sm bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-gold" />
+              <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-white/50 mb-2">Nama Pengguna</label>
+              <input type="text" required placeholder="Nama Pengguna" value={adminUsername} onChange={e => setAdminUsername(e.target.value)} className="w-full px-4 py-3 text-sm bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-gold" />
             </div>
             <div>
-              <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-white/50 mb-2">Password</label>
+              <label className="block text-[10px] font-mono font-bold uppercase tracking-widest text-white/50 mb-2">Kata Sandi</label>
               <div className="relative">
-                <input type={showPass ? 'text' : 'password'} required placeholder="Password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full px-4 py-3 text-sm bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-gold pr-12" />
+                <input type={showPass ? 'text' : 'password'} required placeholder="Kata Sandi" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full px-4 py-3 text-sm bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-gold pr-12" />
                 <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70">
                   <Eye className="w-4 h-4" />
                 </button>
@@ -317,6 +339,9 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
             </div>
             <button type="submit" className="w-full py-3 bg-maroon hover:bg-maroon-dark text-white font-bold text-sm tracking-widest uppercase rounded-xl shadow-lg transition-all cursor-pointer">
               Masuk Dashboard
+            </button>
+            <button type="button" onClick={() => setCurrentTab && setCurrentTab('home')} className="w-full py-3 bg-transparent hover:bg-white/5 border border-white/20 text-white font-bold text-sm tracking-widest uppercase rounded-xl transition-all cursor-pointer text-center">
+              Kembali ke Beranda
             </button>
           </form>
         </div>
@@ -332,19 +357,18 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <div className="w-9 h-9 bg-maroon rounded-xl flex items-center justify-center shadow">
-                <Database className="w-4.5 h-4.5 text-white" />
+              <div className="w-10 h-10 flex items-center justify-center">
+                <img src="/favicon.png" alt="Logo Seraphine" className="w-full h-full object-contain" />
               </div>
-              <h1 className="font-serif text-2xl font-bold text-stone-900">Workspace Control Panel</h1>
-              <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border ${dbSource === 'Supabase' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${dbSource === 'Supabase' ? 'bg-emerald-500 animate-ping-sm' : 'bg-amber-400'}`} />
-                {dbSource === 'Supabase' ? 'Supabase Sync Engine' : 'Offline Local Storage'}
-              </span>
+              <h1 className="font-serif text-2xl font-bold text-stone-900">Panel Administrasi Balai</h1>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={loadData} disabled={isLoading} className="p-2.5 bg-white border border-cream-dark rounded-xl text-gray-500 hover:text-maroon transition-all shadow-sm">
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={() => setCurrentTab && setCurrentTab('home')} className="flex items-center gap-2 px-4 py-2.5 bg-maroon hover:bg-maroon-dark text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer">
+              <Eye className="w-3.5 h-3.5" /> Lihat Website
             </button>
             <button onClick={() => setIsAdmin(false)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-cream-dark rounded-xl text-xs font-bold text-gray-600 hover:text-red-700 transition-all shadow-sm">
               <LogOut className="w-3.5 h-3.5" /> Keluar Sesi
@@ -360,7 +384,6 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
           <TabBtn active={adminTab==='orders'}    onClick={()=>setAdminTab('orders')}    icon={<ShoppingCart className="w-4 h-4"/>}  label="Manajemen Pesanan" badge={metrics.activeOrders} />
           <TabBtn active={adminTab==='messages'}  onClick={()=>setAdminTab('messages')}  icon={<MessageSquare className="w-4 h-4"/>} label="Konsultasi Masuk" badge={metrics.newMessages} />
           <TabBtn active={adminTab==='articles'}  onClick={()=>setAdminTab('articles')}  icon={<BookOpen className="w-4 h-4"/>}      label="Konten Edukasi" badge={articles.length} />
-          <TabBtn active={adminTab==='customers'} onClick={()=>setAdminTab('customers')} icon={<Users className="w-4 h-4"/>}        label="Database CRM" badge={customerDb.length} />
         </div>
 
         {/* ── Tab Layout Render Content (Bento Grid) ───────────────────────── */}
@@ -375,7 +398,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
                   label="Total Valuasi Stok" 
                   value={formatPrice(metrics.totalValuation)} 
                   sub="Total kapitalisasi aset katalog saat ini" 
-                  icon={<DollarSign className="w-6 h-6"/>} 
+                  icon={<span className="font-mono font-bold text-sm select-none">Rp</span>}
                 />
               </div>
               <div className="md:col-span-1">
@@ -390,7 +413,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
                 <StatCard 
                   label="Pesanan Aktif" 
                   value={metrics.activeOrders} 
-                  sub={`${orders.length} total manifest`} 
+                  sub={`${orders.length} total pesanan`} 
                   icon={<ShoppingCart className="w-5 h-5"/>} 
                 />
               </div>
@@ -403,7 +426,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
               <div className="bg-white rounded-[24px] border border-cream-dark p-6 shadow-sm flex flex-col h-[420px]">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="font-serif font-bold text-stone-900 flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-maroon" /> Restock Alert
+                    <AlertCircle className="w-5 h-5 text-maroon" /> Peringatan Stok
                   </h3>
                   <span className="text-[10px] font-bold bg-rose-100 text-maroon px-2.5 py-1 rounded-full">
                     {metrics.lowStockProducts.length} Kritis
@@ -442,11 +465,11 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
               <div className="lg:col-span-2 bg-white rounded-[24px] border border-cream-dark p-6 shadow-sm flex flex-col h-[420px]">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="font-serif font-bold text-stone-900 flex items-center gap-2">
-                    <Database className="w-5 h-5 text-maroon" /> Antrean Order Terbaru
+                    <Database className="w-5 h-5 text-maroon" /> Antrean Pesanan Terbaru
                   </h3>
                   {orders.length > 0 && (
                     <button onClick={() => setAdminTab('orders')} className="text-[10px] font-bold text-maroon hover:text-maroon-dark transition-colors font-mono uppercase tracking-wider bg-maroon/5 hover:bg-maroon/10 px-3 py-1.5 rounded-lg">
-                      Lihat Manifest &rarr;
+                      Lihat Semua Pesanan &rarr;
                     </button>
                   )}
                 </div>
@@ -493,7 +516,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
           <div className="space-y-5 animate-fade-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-cream-dark shadow-sm">
               <p className="text-sm text-stone-700 font-medium">Registrasi Entri Katalog: <span className="font-bold text-maroon">{products.length} produk</span></p>
-              <button onClick={() => { setEditProd({ title:'', category:'Kain Tenun', price:1500000, image:'https://images.unsplash.com/photo-1601924994987-69e26d50dc26?auto=format&fit=crop&w=600&q=80', description:'', isFeatured:false, code:'TIS-NEW'+Math.floor(Math.random()*900+100), dimensions:'200 x 100 cm', weaver:'Mama Penenun', makingTime:'3 Bulan', stock:5 }); setFormErr(''); setIsFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <button onClick={() => { setEditProd({ title:'', category:'Kain Tenun', price: undefined, image:'', description:'', isFeatured:false, code:'TIS-NEW'+Math.floor(Math.random()*900+100), dimensions:'200 x 100 cm', weaver:'Mama Penenun', makingTime:'3 Bulan', stock: 1 }); setFormErr(''); setIsFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
                 <Plus className="w-4 h-4" /> Tambah Entri Kain
               </button>
             </div>
@@ -615,7 +638,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
                   </thead>
                   <tbody className="divide-y divide-cream-dark/40">
                     {filteredOrders.map(o => {
-                      const statusConfig = STATUS_PESANAN[o.status] || STATUS_PESANAN.baru;
+                      const statusConfig = STATUS_PESANAN[o.status] || STATUS_PESANAN.menunggu;
                       return (
                         <tr key={o.id} className="hover:bg-brand-cream/30 transition-colors">
                           <td className="p-4">
@@ -626,8 +649,12 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
                             </a>
                           </td>
                           <td className="p-4">
-                            <p className="font-serif font-bold text-sm text-stone-900">{o.productTitle}</p>
-                            <p className="text-[10px] text-gray-400 font-mono">{o.productCode} • {o.quantity} pcs</p>
+                            {o.items && o.items.map((item, idx) => (
+                              <div key={idx} className="mb-2 last:mb-0 border-b border-cream-dark/20 pb-1.5 last:pb-0 last:border-b-0">
+                                <p className="font-serif font-bold text-sm text-stone-900">{item.productTitle}</p>
+                                <p className="text-[10px] text-gray-400 font-mono">{item.productCode} • {item.quantity} pcs</p>
+                              </div>
+                            ))}
                           </td>
                           <td className="p-4 font-mono font-bold text-maroon text-sm">{formatPrice(o.totalPrice)}</td>
                           <td className="p-4 text-[11px] text-gray-400 font-mono">{formatDateTime(o.createdAt)}</td>
@@ -690,7 +717,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
           <div className="space-y-5 animate-fade-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-cream-dark shadow-sm">
               <p className="text-sm text-stone-700 font-medium">Koleksi Artikel Budaya: <strong className="text-maroon">{articles.length} entri</strong></p>
-              <button onClick={() => { setEditArt({ title:'', excerpt:'', content:'', image:'https://images.unsplash.com/photo-1596178065887-1198b6148b2b?auto=format&fit=crop&w=600&q=80', author:'Admin Seraphine', slug:'' }); setArtErr(''); setIsArtFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <button onClick={() => { setEditArt({ title:'', excerpt:'', content:'', image:'', author:'Admin Seraphine', slug:'' }); setArtErr(''); setIsArtFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase rounded-xl shadow flex items-center gap-2 cursor-pointer">
                 <Plus className="w-4 h-4"/> Rilis Artikel Baru
               </button>
             </div>
@@ -719,39 +746,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
           </div>
         )}
 
-        {/* Tab Konten Database CRM Pelanggan */}
-        {adminTab === 'customers' && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="bg-white rounded-2xl border border-cream-dark shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[800px]">
-                  <thead>
-                    <tr className="bg-brand-cream text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-cream-dark">
-                      <th className="p-4">Nama Pelanggan</th>
-                      <th className="p-4">Email</th>
-                      <th className="p-4 w-36">WhatsApp</th>
-                      <th className="p-4">Alamat Domisili</th>
-                      <th className="p-4 w-28 text-center">Fekuensi Order</th>
-                      <th className="p-4 w-36 text-right">Total Akumulasi Spend</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-cream-dark/40">
-                    {customerDb.map((c, i) => (
-                      <tr key={i} className="hover:bg-brand-cream/30 transition-colors">
-                        <td className="p-4 font-bold text-sm text-stone-900">{c.name}</td>
-                        <td className="p-4">{c.email !== '-' ? <a href={`mailto:${c.email}`} className="text-indigo-700 font-mono text-xs">{c.email}</a> : <span className="text-gray-400">—</span>}</td>
-                        <td className="p-4">{c.phone !== '-' ? <a href={`https://wa.me/${c.phone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="text-emerald-700 font-bold font-mono text-xs">{c.phone}</a> : <span className="text-gray-400">—</span>}</td>
-                        <td className="p-4 text-xs text-stone-700 max-w-[200px] truncate" title={c.address}>{c.address}</td>
-                        <td className="p-4 font-mono font-bold text-center text-sm">{c.totalOrders}</td>
-                        <td className="p-4 font-mono font-bold text-right text-emerald-700 text-sm">{formatPrice(c.totalSpend)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+
 
       </div>
 
@@ -766,39 +761,59 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
             <form onSubmit={handleSaveProd} className="p-6 space-y-4 overflow-y-auto flex-1">
               {formErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl font-semibold flex items-center gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0"/>{formErr}</div>}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Nama Kain *</label>
-                  <input type="text" required placeholder="Tenun Sumba Kambera" value={editProd.title||''} onChange={e=>setEditProd({...editProd,title:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Kode SKU Produk *</label>
-                  <input type="text" required placeholder="TIS-KAM07" value={editProd.code||''} onChange={e=>setEditProd({...editProd,code:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Kategori Klasifikasi</label>
-                  <select value={editProd.category||'Kain Tenun'} onChange={e=>setEditProd({...editProd,category:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl">
-                    {['Kain Tenun','Tas & Aksesori','Selendang','Dekorasi'].map(c=><option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <input type="text" required placeholder="Contoh: Tenun Sumba Kambera" value={editProd.title||''} onChange={e=>setEditProd({...editProd,title:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Harga Nominal (IDR) *</label>
-                  <input type="number" required placeholder="1500000" value={editProd.price||''} onChange={e=>setEditProd({...editProd,price:Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+                  <input type="number" required placeholder="Contoh: 1500000" value={editProd.price||''} onChange={e=>setEditProd({...editProd,price:Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
                 </div>
                 <div>
                   <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Kuantitas Alokasi Stok *</label>
-                  <input type="number" required min={0} placeholder="5" value={editProd.stock??5} onChange={e=>setEditProd({...editProd,stock:Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Identitas Penenun (Mama)</label>
-                  <input type="text" placeholder="Mama Seraphine Weetebula" value={editProd.weaver||''} onChange={e=>setEditProd({...editProd,weaver:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+                  <input type="number" required min={0} placeholder="Contoh: 5" value={editProd.stock??5} onChange={e=>setEditProd({...editProd,stock:Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Akses Alamat URL Gambar *</label>
-                  <input type="url" required placeholder="https://images.unsplash.com/photo-..." value={editProd.image||''} onChange={e=>setEditProd({...editProd,image:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Foto Produk *</label>
+                  {editProd.image ? (
+                    <div className="relative w-full h-44 rounded-xl overflow-hidden border border-cream-dark shadow-sm bg-[#F5EDE3]">
+                      <img src={editProd.image} className="w-full h-full object-cover" alt="Pratinjau Foto" />
+                      <button 
+                        type="button" 
+                        onClick={() => setEditProd({ ...editProd, image: '' })}
+                        className="absolute top-3 right-3 p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow transition-all text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Hapus Foto
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-cream-dark hover:border-maroon/40 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer bg-brand-cream/30 hover:bg-brand-cream/50 transition-all text-center">
+                      <Plus className="w-6 h-6 text-stone-400 mb-1.5" />
+                      <span className="text-xs font-bold text-stone-700">Pilih Foto dari Perangkat</span>
+                      <span className="text-[9px] text-gray-400 mt-1">Maksimal ukuran file: 2 MB</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => handleFileChange(e, 'product')} 
+                        className="hidden" 
+                      />
+                    </label>
+                  )}
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Filosofi Motif & Deskripsi Produk</label>
-                  <textarea rows={3} placeholder="Tuliskan latar belakang kebudayaan adat atau makna geometris motif kain..." value={editProd.description||''} onChange={e=>setEditProd({...editProd,description:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl resize-none"/>
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Deskripsi & Latar Belakang Produk</label>
+                  <textarea rows={3} placeholder="Contoh: Kain tenun khas daerah Sumba Timur dengan tenunan benang alami..." value={editProd.description||''} onChange={e=>setEditProd({...editProd,description:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl resize-none"/>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Makna Simbolis & Filosofi Motif</label>
+                  <textarea rows={3} placeholder="Contoh: Motif Kuda melambangkan keagungan, kepahlawanan, dan kebangsawanan..." value={editProd.maknaMotif||''} onChange={e=>setEditProd({...editProd,maknaMotif:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl resize-none"/>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Status Publikasi Produk *</label>
+                  <select value={editProd.status||'aktif'} onChange={e=>setEditProd({...editProd,status:e.target.value as any})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl">
+                    <option value="aktif">Aktif (Ditampilkan di Katalog)</option>
+                    <option value="nonaktif">Nonaktif (Diarsipkan)</option>
+                  </select>
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t border-cream-dark">
@@ -822,11 +837,38 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin }: AdminViewP
               {artErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl font-semibold flex items-center gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0"/>{artErr}</div>}
               <div>
                 <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Judul Manuskrip *</label>
-                <input type="text" required placeholder="Sejarah Makna Motif Kuda Sumba" value={editArt.title||''} onChange={e=>setEditArt({...editArt,title:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+                <input type="text" required placeholder="Contoh: Sejarah Makna Motif Kuda Sumba" value={editArt.title||''} onChange={e=>setEditArt({...editArt,title:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+              </div>
+              <div>
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Foto Sampul Artikel *</label>
+                {editArt.image ? (
+                  <div className="relative w-full h-40 rounded-xl overflow-hidden border border-cream-dark shadow-sm bg-[#F5EDE3]">
+                    <img src={editArt.image} className="w-full h-full object-cover" alt="Pratinjau Sampul" />
+                    <button 
+                      type="button" 
+                      onClick={() => setEditArt({ ...editArt, image: '' })}
+                      className="absolute top-3 right-3 p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow transition-all text-xs font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Hapus Foto
+                    </button>
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-cream-dark hover:border-maroon/40 rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer bg-brand-cream/30 hover:bg-brand-cream/50 transition-all text-center">
+                    <Plus className="w-5 h-5 text-stone-400 mb-1" />
+                    <span className="text-xs font-bold text-stone-700">Pilih Foto Sampul</span>
+                    <span className="text-[8px] text-gray-400 mt-0.5">Maksimal: 2 MB</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => handleFileChange(e, 'article')} 
+                      className="hidden" 
+                    />
+                  </label>
+                )}
               </div>
               <div>
                 <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Ringkasan Narasi (Excerpt) *</label>
-                <input type="text" required placeholder="Deskripsi singkat isi artikel untuk halaman grid depan" value={editArt.excerpt||''} onChange={e=>setEditArt({...editArt,excerpt:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
+                <input type="text" required placeholder="Contoh: Ringkasan singkat mengenai sejarah tenun..." value={editArt.excerpt||''} onChange={e=>setEditArt({...editArt,excerpt:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-cream-dark rounded-xl"/>
               </div>
               <div>
                 <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Konten Narasi Lengkap *</label>

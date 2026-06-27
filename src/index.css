@@ -5,6 +5,11 @@
   --font-sans:  "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", Georgia, Cambria, serif;
   --font-mono:  "JetBrains Mono", ui-monospace, monospace;
+
+  --color-maroon: #7B1618;
+  --color-maroon-dark: #5A0E10;
+  --color-cream-dark: #EFE6DA;
+  --color-brand-cream: #FBF8F4;
 }
 
 /* ── Reset & Base Theme ───────────────────────────────────────────────────── */

@@ -5,6 +5,8 @@ export interface Product {
   price: number;
   image: string;
   description: string;
+  maknaMotif?: string; // Philosophy of Motif
+  status?: 'aktif' | 'nonaktif'; // Product status in catalog
   isFeatured: boolean;
   code: string;
   dimensions?: string;
@@ -28,19 +30,23 @@ export interface ContactMessage {
   product_code?: string;
 }
 
+export interface OrderItem {
+  productId: string;
+  productTitle: string;
+  productCode: string;
+  price: number;
+  quantity: number;
+}
+
 export interface Order {
   id: string;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
   customerAddress: string;
-  productId: string;
-  productTitle: string;
-  productCode: string;
-  price: number;
-  quantity: number;
+  items: OrderItem[];
   totalPrice: number;
-  status: 'baru' | 'diproses' | 'dikirim' | 'selesai' | 'dibatalkan';
+  status: 'menunggu' | 'dikirim' | 'selesai' | 'batal';
   createdAt: string;
 }
 
