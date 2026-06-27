@@ -75,6 +75,28 @@ const TabBtn = ({
   </button>
 );
 
+// ─── Sub-Component: BottomTabItem ───────────────────────────────────────────
+const BottomTabItem = ({
+  active, onClick, icon, label, badge
+}: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }) => (
+  <button
+    onClick={onClick}
+    className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all relative cursor-pointer ${
+      active ? 'text-[#7B1618]' : 'text-[#7A6558]'
+    }`}
+  >
+    <div className={`p-1 rounded-lg transition-colors ${active ? 'bg-[#7B1618]/10' : ''}`}>
+      {React.cloneElement(icon as React.ReactElement, { className: 'w-4 h-4' })}
+    </div>
+    <span className="text-[8px] font-bold tracking-tight">{label}</span>
+    {badge !== undefined && badge > 0 && (
+      <span className="absolute top-1 right-2 bg-[#7B1618] text-white text-[7px] font-bold font-mono px-1 py-0.2 rounded-full min-w-3.5 h-3.5 flex items-center justify-center border border-white">
+        {badge}
+      </span>
+    )}
+  </button>
+);
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTab }: AdminViewProps) {
   const [adminUsername, setAdminUsername] = useState('');
@@ -350,7 +372,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
   }
 
   return (
-    <div id="admin-workspace" className="min-h-screen bg-brand-cream pt-10 pb-16">
+    <div id="admin-workspace" className="min-h-screen bg-brand-cream pt-10 pb-24 md:pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Top Header Control */}
@@ -376,8 +398,8 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
           </div>
         </div>
 
-        {/* Tab Selection Navigation */}
-        <div className="flex overflow-x-auto no-scrollbar gap-1.5 bg-white border border-[#EFE6DA] p-2 rounded-2xl shadow-sm mb-8 scroll-smooth">
+        {/* Tab Selection Navigation (Desktop Only) */}
+        <div className="hidden md:flex overflow-x-auto no-scrollbar gap-1.5 bg-white border border-[#EFE6DA] p-2 rounded-2xl shadow-sm mb-8 scroll-smooth">
           <TabBtn active={adminTab==='overview'}  onClick={()=>setAdminTab('overview')}  icon={<BarChart3 className="w-4 h-4"/>}     label="Ringkasan Performa" />
           <TabBtn active={adminTab==='products'}  onClick={()=>setAdminTab('products')}  icon={<Package className="w-4 h-4"/>}       label="Katalog Tenun"  badge={products.length} />
           <TabBtn active={adminTab==='stock'}     onClick={()=>setAdminTab('stock')}     icon={<Layers className="w-4 h-4"/>}        label="Manajemen Stok" />
@@ -889,6 +911,16 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
           </div>
         </div>
       )}
+
+      {/* Sticky Bottom Navigation Bar (Mobile Only) */}
+      <div className="fixed bottom-0 inset-x-0 z-[140] bg-[#FBF8F4]/95 backdrop-blur-md border-t border-[#EFE6DA] flex md:hidden items-center justify-around py-2 px-1 shadow-[0_-4px_20px_rgba(61,26,10,0.08)]">
+        <BottomTabItem active={adminTab==='overview'}  onClick={()=>setAdminTab('overview')}  icon={<BarChart3 />}     label="Ringkasan" />
+        <BottomTabItem active={adminTab==='products'}  onClick={()=>setAdminTab('products')}  icon={<Package />}       label="Katalog"   badge={products.length} />
+        <BottomTabItem active={adminTab==='stock'}     onClick={()=>setAdminTab('stock')}     icon={<Layers />}        label="Stok" />
+        <BottomTabItem active={adminTab==='orders'}    onClick={()=>setAdminTab('orders')}    icon={<ShoppingCart />}  label="Pesanan"   badge={metrics.activeOrders} />
+        <BottomTabItem active={adminTab==='messages'}  onClick={()=>setAdminTab('messages')}  icon={<MessageSquare />} label="Chat"      badge={metrics.newMessages} />
+        <BottomTabItem active={adminTab==='articles'}  onClick={()=>setAdminTab('articles')}  icon={<BookOpen />}      label="Edukasi"   badge={articles.length} />
+      </div>
 
     </div>
   );
