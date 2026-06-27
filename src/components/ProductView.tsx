@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, X, Plus, Edit, Trash2, ArrowRight, Star, Filter } from 'lucide-react';
+import { Search, SlidersHorizontal, X, Plus, Edit, Trash2, ArrowRight, Star, Filter, AlertCircle } from 'lucide-react';
 import { Product } from '../types';
 import { dbService } from '../lib/supabase';
 
@@ -23,6 +23,11 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
   const [isFormOpen, setIsFormOpen]                 = useState(false);
   const [btnSaving, setBtnSaving]                   = useState(false);
   const [formErr, setFormErr]                       = useState('');
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({ isOpen: true, title, message, onConfirm });
+  };
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -67,11 +72,16 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
     }
   };
 
-  const handleDeleteProduct = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteProduct = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Hapus mahakarya ini dari katalog?')) return;
-    await dbService.deleteProduct(id);
-    onRefresh();
+    openConfirm(
+      'Hapus Karya Tenun',
+      'Apakah Anda yakin ingin menghapus karya tenun ini dari katalog secara permanen?',
+      async () => {
+        await dbService.deleteProduct(id);
+        onRefresh();
+      }
+    );
   };
 
   return (
@@ -263,6 +273,35 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
           </div>
         </div>
       )}
+      {/* ── Modal Block: Konfirmasi Profesional ── */}
+      {confirmModal && confirmModal.isOpen && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmModal(null)}>
+          <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 animate-scale-in border border-[#F1F5F9]" onClick={e => e.stopPropagation()}>
+            <div className="flex flex-col items-center text-center">
+              <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-4">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="font-serif text-lg font-bold text-stone-900 mb-2">{confirmModal.title}</h3>
+              <p className="text-xs text-[#64748B] leading-relaxed mb-6">{confirmModal.message}</p>
+              <div className="flex gap-3 w-full">
+                <button 
+                  onClick={() => setConfirmModal(null)} 
+                  className="flex-1 py-2.5 bg-[#FFFFFF] border border-[#F1F5F9] text-xs font-bold text-[#64748B] rounded-xl hover:bg-[#F1F5F9] transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} 
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-xs font-bold text-white rounded-xl transition-all cursor-pointer shadow-md"
+                >
+                  Hapus
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

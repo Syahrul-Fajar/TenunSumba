@@ -108,6 +108,11 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
   const [adminTab, setAdminTab] = useState<AdminTab>('overview');
 
   const [products,  setProducts]  = useState<Product[]>([]);
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({ isOpen: true, title, message, onConfirm });
+  };
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [orders,    setOrders]    = useState<Order[]>([]);
   const [articles,  setArticles]  = useState<Article[]>([]);
@@ -242,10 +247,15 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     }
   };
 
-  const handleDeleteProd = async (id: string) => {
-    if (!confirm('Yakin ingin menghapus produk ini dari katalog?')) return;
-    await dbService.deleteProduct(id);
-    await loadData();
+  const handleDeleteProd = (id: string) => {
+    openConfirm(
+      'Hapus Karya Tenun',
+      'Apakah Anda yakin ingin menghapus karya tenun ini dari katalog secara permanen?',
+      async () => {
+        await dbService.deleteProduct(id);
+        await loadData();
+      }
+    );
   };
 
   const handleUpdateStock = async (p: Product, newStock: number) => {
@@ -259,10 +269,15 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
   };
 
-  const handleDeleteOrder = async (id: string) => {
-    if (!confirm('Hapus catatan pesanan ini?')) return;
-    await dbService.deleteOrder(id);
-    setOrders(prev => prev.filter(o => o.id !== id));
+  const handleDeleteOrder = (id: string) => {
+    openConfirm(
+      'Hapus Catatan Pesanan',
+      'Apakah Anda yakin ingin menghapus catatan pesanan ini secara permanen?',
+      async () => {
+        await dbService.deleteOrder(id);
+        setOrders(prev => prev.filter(o => o.id !== id));
+      }
+    );
   };
 
   const handleUpdateMsgStatus = async (id: string, status: 'baru' | 'dibaca' | 'selesai') => {
@@ -270,10 +285,15 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     setInquiries(prev => prev.map(m => m.id === id ? { ...m, status } : m));
   };
 
-  const handleDeleteMsg = async (id: string) => {
-    if (!confirm('Hapus pesan masuk ini?')) return;
-    await dbService.deleteInquiry(id);
-    setInquiries(prev => prev.filter(m => m.id !== id));
+  const handleDeleteMsg = (id: string) => {
+    openConfirm(
+      'Hapus Pesan Masuk',
+      'Apakah Anda yakin ingin menghapus pesan konsultasi masuk ini?',
+      async () => {
+        await dbService.deleteInquiry(id);
+        setInquiries(prev => prev.filter(m => m.id !== id));
+      }
+    );
   };
 
   const handleSaveArt = async (e: React.FormEvent) => {
@@ -304,10 +324,15 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     }
   };
 
-  const handleDeleteArt = async (id: string) => {
-    if (!confirm('Hapus artikel ini?')) return;
-    await dbService.deleteArticle(id);
-    setArticles(prev => prev.filter(a => a.id !== id));
+  const handleDeleteArt = (id: string) => {
+    openConfirm(
+      'Hapus Manuskrip Edukasi',
+      'Apakah Anda yakin ingin menghapus artikel edukasi ini secara permanen?',
+      async () => {
+        await dbService.deleteArticle(id);
+        setArticles(prev => prev.filter(a => a.id !== id));
+      }
+    );
   };
 
   // ── Memoized Metrics Calculation ───────────────────────────────────────────
@@ -933,6 +958,35 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
         <BottomTabItem active={adminTab==='messages'}  onClick={()=>setAdminTab('messages')}  icon={<MessageSquare />} label="Chat"      badge={metrics.newMessages} />
         <BottomTabItem active={adminTab==='articles'}  onClick={()=>setAdminTab('articles')}  icon={<BookOpen />}      label="Edukasi"   badge={articles.length} />
       </div>
+
+      {/* ── Modal Block: Konfirmasi Profesional ── */}
+      {confirmModal && confirmModal.isOpen && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmModal(null)}>
+          <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 animate-scale-in border border-[#F1F5F9]" onClick={e => e.stopPropagation()}>
+            <div className="flex flex-col items-center text-center">
+              <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-4">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="font-serif text-lg font-bold text-stone-900 mb-2">{confirmModal.title}</h3>
+              <p className="text-xs text-[#64748B] leading-relaxed mb-6">{confirmModal.message}</p>
+              <div className="flex gap-3 w-full">
+                <button 
+                  onClick={() => setConfirmModal(null)} 
+                  className="flex-1 py-2.5 bg-[#FFFFFF] border border-[#F1F5F9] text-xs font-bold text-[#64748B] rounded-xl hover:bg-[#F1F5F9] transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} 
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-xs font-bold text-white rounded-xl transition-all cursor-pointer shadow-md"
+                >
+                  Hapus
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
