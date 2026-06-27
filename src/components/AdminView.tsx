@@ -61,7 +61,7 @@ const TabBtn = ({
 }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer whitespace-nowrap ${
+    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer whitespace-nowrap flex-shrink-0 ${
       active ? 'bg-maroon text-white shadow-md' : 'text-stone-700 hover:bg-cream-dark/50 hover:text-stone-900'
     }`}
   >
@@ -354,30 +354,30 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Top Header Control */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 flex items-center justify-center">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 text-center sm:text-left">
+          <div className="flex flex-col items-center sm:items-start gap-1">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 flex items-center justify-center">
                 <img src="/favicon.png" alt="Logo Seraphine" className="w-full h-full object-contain" />
               </div>
-              <h1 className="font-serif text-2xl font-bold text-stone-900">Panel Administrasi Balai</h1>
+              <h1 className="font-serif text-xl sm:text-2xl font-bold text-stone-900">Panel Administrasi Balai</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={loadData} disabled={isLoading} className="p-2.5 bg-white border border-cream-dark rounded-xl text-gray-500 hover:text-maroon transition-all shadow-sm">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 w-full sm:w-auto">
+            <button onClick={loadData} disabled={isLoading} className="p-2.5 bg-white border border-[#EFE6DA] rounded-xl text-stone-500 hover:text-maroon transition-all shadow-sm">
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
             <button onClick={() => setCurrentTab && setCurrentTab('home')} className="flex items-center gap-2 px-4 py-2.5 bg-maroon hover:bg-maroon-dark text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer">
               <Eye className="w-3.5 h-3.5" /> Lihat Website
             </button>
-            <button onClick={() => setIsAdmin(false)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-cream-dark rounded-xl text-xs font-bold text-gray-600 hover:text-red-700 transition-all shadow-sm">
+            <button onClick={() => setIsAdmin(false)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#EFE6DA] rounded-xl text-xs font-bold text-[#7A6558] hover:text-red-700 transition-all shadow-sm">
               <LogOut className="w-3.5 h-3.5" /> Keluar Sesi
             </button>
           </div>
         </div>
 
         {/* Tab Selection Navigation */}
-        <div className="flex flex-wrap gap-1.5 bg-white border border-cream-dark p-2 rounded-2xl shadow-sm mb-8">
+        <div className="flex overflow-x-auto no-scrollbar gap-1.5 bg-white border border-[#EFE6DA] p-2 rounded-2xl shadow-sm mb-8 scroll-smooth">
           <TabBtn active={adminTab==='overview'}  onClick={()=>setAdminTab('overview')}  icon={<BarChart3 className="w-4 h-4"/>}     label="Ringkasan Performa" />
           <TabBtn active={adminTab==='products'}  onClick={()=>setAdminTab('products')}  icon={<Package className="w-4 h-4"/>}       label="Katalog Tenun"  badge={products.length} />
           <TabBtn active={adminTab==='stock'}     onClick={()=>setAdminTab('stock')}     icon={<Layers className="w-4 h-4"/>}        label="Manajemen Stok" />
@@ -493,10 +493,17 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                               <span className="text-[10px] text-gray-400 font-mono">{formatDate(o.createdAt)}</span>
                             </div>
                             <p className="font-bold text-sm text-stone-900 truncate" title={o.customerName}>{o.customerName}</p>
-                            <div className="flex justify-between items-end mt-2 pt-2 border-t border-cream-dark/50">
-                                <p className="text-[11px] text-gray-500 font-mono truncate max-w-[120px]" title={o.productTitle}>
-                                  {o.productCode} &times; {o.quantity}
-                                </p>
+                            <div className="flex justify-between items-end mt-2 pt-2 border-t border-[#EFE6DA]">
+                                <div className="text-[10px] text-[#7A6558] font-mono truncate max-w-[180px]">
+                                  {o.items && o.items.length > 0 ? (
+                                    <span>
+                                      {o.items[0].productCode} ({o.items[0].quantity}x)
+                                      {o.items.length > 1 && ` +${o.items.length - 1} item`}
+                                    </span>
+                                  ) : (
+                                    <span>—</span>
+                                  )}
+                                </div>
                                 <p className="text-sm font-bold text-maroon">{formatPrice(o.totalPrice)}</p>
                             </div>
                           </div>
