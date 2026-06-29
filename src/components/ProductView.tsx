@@ -57,9 +57,7 @@ export default function ProductView({ onSelectProduct, products = [], isAdmin, o
         description: editingProduct.description || '',
         isFeatured: editingProduct.isFeatured || false,
         code: editingProduct.code!,
-        dimensions: editingProduct.dimensions || '',
         weaver: editingProduct.weaver || 'Penenun Sumba',
-        makingTime: editingProduct.makingTime || '3 Bulan',
         stock: editingProduct.stock !== undefined ? Number(editingProduct.stock) : 5,
       });
       setIsFormOpen(false);

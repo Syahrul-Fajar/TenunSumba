@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Product, ContactMessage, Order, Article, OrderItem } from '../types';
+import { Product, ContactMessage, Order, Article, OrderItem, Kategori, Penenun, KelompokPenenun, Promo, Review, Pembayaran, Pengiriman, StokLog, User, KeranjangItem, Notifikasi, CustomSize } from '../types';
 import { PRODUCTS } from '../data/products';
 
 const rawSupabaseUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || '').trim();
@@ -138,7 +138,9 @@ export const dbService = {
           deskripsi: product.description || '',
           makna_motif: product.maknaMotif || '',
           status: product.status || 'aktif',
-          stok: product.stock ?? 5
+          stok: product.stock ?? 5,
+          id_kategori: product.id_kategori || null,
+          id_penenun: product.id_penenun || null
         };
 
         let result;
@@ -156,9 +158,11 @@ export const dbService = {
           const finalProduct: Product = { ...product, id: finalId } as Product;
           return finalProduct;
         }
-        console.error('Supabase save failed, writing locally instead:', result.error);
+        console.error('Supabase save failed:', result.error);
+        throw new Error(result.error.message);
       } catch (err) {
-        console.error('Supabase write crash; saving locally:', err);
+        console.error('Supabase write crash:', err);
+        throw err;
       }
     }
 
@@ -197,45 +201,24 @@ export const dbService = {
     return true;
   },
 
-  // 2. INQUIRIES / CONTACT SERVICES (Database Pelanggan - Routed entirely locally)
-  async getInquiries(): Promise<any[]> {
-    return localDb.getInquiries();
-  },
-
-  async sendInquiry(inquiry: Omit<ContactMessage, ''> & { product_title?: string; product_code?: string }): Promise<any> {
-    const payload = {
-      id: 'inq_' + Math.random().toString(36).substring(2, 9),
-      name: inquiry.name,
-      email: inquiry.email,
-      subject: inquiry.subject,
-      message: inquiry.message,
-      product_title: inquiry.product_title || null,
-      product_code: inquiry.product_code || null,
-      status: 'baru',
-      created_at: new Date().toISOString()
-    };
-
-    const list = localDb.getInquiries();
-    list.unshift(payload);
-    localDb.saveInquiries(list);
-    return payload;
-  },
-
-  async updateInquiryStatus(id: string, status: 'baru' | 'dibaca' | 'selesai'): Promise<boolean> {
-    const list = localDb.getInquiries();
-    const idx = list.findIndex((item: any) => item.id === id);
-    if (idx !== -1) {
-      list[idx].status = status;
-      localDb.saveInquiries(list);
+  async checkAdminCredentials(username: string, password: string): Promise<boolean> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.rpc('verify_admin_password', {
+          p_username: username,
+          p_password: password
+        });
+        
+        if (!error && data !== null) {
+          return data as boolean;
+        }
+        console.warn('RPC auth failed or not defined. Trying fallback checks.', error);
+      } catch (err) {
+        console.error('Admin credential check error:', err);
+      }
     }
-    return true;
-  },
-
-  async deleteInquiry(id: string): Promise<boolean> {
-    const list = localDb.getInquiries();
-    const filtered = list.filter((item: any) => item.id !== id);
-    localDb.saveInquiries(filtered);
-    return true;
+    return (username.toLowerCase() === 'tenunsumba' && password === 'tenunsumba') || 
+           (username.toLowerCase() === 'admin' && (password === 'admin' || password === '1234'));
   },
 
   // 3. ORDERS SERVICES (Manajemen Pesanan)
@@ -293,9 +276,42 @@ export const dbService = {
     let finalId = '';
     const createdAt = new Date().toISOString();
 
+    const orderItems = order.items || [
+      {
+        productId: (order as any).productId,
+        productTitle: (order as any).productTitle || 'Kain Tenun Sumba',
+        productCode: (order as any).productCode || 'TENUN-SUMBA',
+        price: (order as any).price || order.totalPrice,
+        quantity: (order as any).quantity || 1
+      }
+    ];
+
     if (supabase) {
       try {
+        // 1. Create a guest user record to resolve the NOT NULL id_user constraint in pesanan
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .insert([{
+            nama_lengkap: order.customerName,
+            email: `guest_${Date.now()}_${Math.floor(Math.random() * 1000)}@example.com`,
+            password: 'guest_checkout',
+            no_telepon: order.customerPhone,
+            alamat: order.customerAddress
+          }])
+          .select();
+
+        if (userError) {
+          console.error('Supabase guest user creation failed:', userError);
+          throw new Error(userError.message);
+        }
+
+        if (!userData || userData.length === 0) {
+          throw new Error('Failed to create guest user record.');
+        }
+
+        // 2. Insert order using the generated id_user
         const payload = {
+          id_user: userData[0].id_user,
           total_harga: order.totalPrice,
           status_pesanan: order.status || 'menunggu',
           catatan: `${order.customerName} | ${order.customerPhone} | ${order.customerAddress}`
@@ -305,34 +321,40 @@ export const dbService = {
           finalId = String(result.data[0].id_pesanan);
           
           // Insert items into detail_pesanan
-          for (const item of order.items) {
+          for (const item of orderItems) {
             const detailPayload = {
               id_pesanan: Number(finalId),
               id_produk: Number(item.productId),
               jumlah: item.quantity,
               harga_satuan: item.price
             };
-            await supabase.from('detail_pesanan').insert([detailPayload]);
+            const detailResult = await supabase.from('detail_pesanan').insert([detailPayload]);
+            if (detailResult.error) {
+              console.error('Supabase detail_pesanan insert failed:', detailResult.error);
+              throw new Error(detailResult.error.message);
+            }
             await this.deductProductStock(item.productId, item.quantity);
           }
 
-          const finalOrder: Order = { ...order, id: finalId, createdAt };
+          const finalOrder: Order = { ...order, id: finalId, createdAt, items: orderItems };
           return finalOrder;
         }
-        console.error('Supabase create order failed, writing locally instead:', result.error);
+        console.error('Supabase create order failed:', result ? result.error : 'Unknown error');
+        throw new Error(result ? result.error?.message : 'Failed to save order.');
       } catch (err) {
-        console.error('Supabase order write crash; saving locally:', err);
+        console.error('Supabase order write crash:', err);
+        throw err;
       }
     }
 
     // Save locally
-    const finalOrder: Order = { ...order, id: finalId || 'ord_' + Math.random().toString(36).substring(2, 9), createdAt };
+    const finalOrder: Order = { ...order, id: finalId || 'ord_' + Math.random().toString(36).substring(2, 9), createdAt, items: orderItems };
     const list = localDb.getOrders();
     list.unshift(finalOrder);
     localDb.saveOrders(list);
 
     // Deduct stock locally
-    for (const item of order.items) {
+    for (const item of orderItems) {
       await this.deductProductStock(item.productId, item.quantity);
     }
     return finalOrder;
@@ -346,6 +368,16 @@ export const dbService = {
         const currentStock = product.stock ?? 5;
         const newStock = Math.max(0, currentStock - quantity);
         await this.saveProduct({ ...product, stock: newStock });
+        // Log stok keluar
+        if (supabase) {
+          await supabase.from('stok_log').insert([{
+            id_produk: Number(productId),
+            jumlah_masuk: 0,
+            jumlah_keluar: quantity,
+            keterangan: 'Terjual (pesanan)',
+            tanggal: new Date().toISOString()
+          }]);
+        }
       }
     } catch (err) {
       console.error('Failed to deduct stock:', err);
@@ -485,11 +517,511 @@ export const dbService = {
     const filtered = list.filter((a) => a.id !== id);
     localDb.saveArticles(filtered);
     return true;
-  }
+  },
+  // 5. KATEGORI SERVICES
+  async getAllKategori(): Promise<Kategori[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('kategori').select('*').order('nama_kategori');
+        if (!error && data) return data as Kategori[];
+        console.warn('Kategori fetch failed:', error);
+      } catch (err) { console.error(err); }
+    }
+    return [];
+  },
+
+  async saveKategori(k: Omit<Kategori, 'id_kategori'> & { id_kategori?: number }): Promise<Kategori> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    const isNew = !k.id_kategori;
+    const payload = { nama_kategori: k.nama_kategori, deskripsi: k.deskripsi || '' };
+    let result;
+    if (isNew) {
+      result = await supabase.from('kategori').insert([payload]).select();
+    } else {
+      result = await supabase.from('kategori').update(payload).eq('id_kategori', k.id_kategori).select();
+    }
+    if (result.error) throw new Error(result.error.message);
+    return result.data![0] as Kategori;
+  },
+
+  async deleteKategori(id: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('kategori').delete().eq('id_kategori', id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  // 6. KELOMPOK PENENUN SERVICES
+  async getAllKelompokPenenun(): Promise<KelompokPenenun[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('kelompok_penenun').select('*').order('nama_kelompok');
+        if (!error && data) return data as KelompokPenenun[];
+        console.warn('KelompokPenenun fetch failed:', error);
+      } catch (err) { console.error(err); }
+    }
+    return [];
+  },
+
+  async saveKelompokPenenun(k: Omit<KelompokPenenun, 'id_kelompok'> & { id_kelompok?: number }): Promise<KelompokPenenun> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    const isNew = !k.id_kelompok;
+    const payload = { nama_kelompok: k.nama_kelompok, lokasi_desa: k.lokasi_desa || '', deskripsi: k.deskripsi || '', foto: k.foto || '' };
+    let result;
+    if (isNew) {
+      result = await supabase.from('kelompok_penenun').insert([payload]).select();
+    } else {
+      result = await supabase.from('kelompok_penenun').update(payload).eq('id_kelompok', k.id_kelompok).select();
+    }
+    if (result.error) throw new Error(result.error.message);
+    return result.data![0] as KelompokPenenun;
+  },
+
+  async deleteKelompokPenenun(id: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('kelompok_penenun').delete().eq('id_kelompok', id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  // 7. PENENUN SERVICES
+  async getAllPenenun(): Promise<Penenun[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('penenun').select('*').order('nama');
+        if (!error && data) return data as Penenun[];
+        console.warn('Penenun fetch failed:', error);
+      } catch (err) { console.error(err); }
+    }
+    return [];
+  },
+
+  async savePenenun(p: Omit<Penenun, 'id_penenun'> & { id_penenun?: number }): Promise<Penenun> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    const isNew = !p.id_penenun;
+    const payload = { nama: p.nama, bio: p.bio || '', foto: p.foto || '', nama_kelompok: p.nama_kelompok || '', lokasi_desa: p.lokasi_desa || '', deskripsi: p.deskripsi || '' };
+    let result;
+    if (isNew) {
+      result = await supabase.from('penenun').insert([payload]).select();
+    } else {
+      result = await supabase.from('penenun').update(payload).eq('id_penenun', p.id_penenun).select();
+    }
+    if (result.error) throw new Error(result.error.message);
+    return result.data![0] as Penenun;
+  },
+
+  async deletePenenun(id: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('penenun').delete().eq('id_penenun', id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  // 8. PROMO SERVICES
+  async getAllPromo(): Promise<Promo[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('promo').select('*').order('berlaku_hingga');
+        if (!error && data) return data as Promo[];
+        console.warn('Promo fetch failed:', error);
+      } catch (err) { console.error(err); }
+    }
+    return [];
+  },
+
+  async verifyPromo(kode: string): Promise<Promo | null> {
+    if (!supabase) return null;
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('promo')
+      .select('*')
+      .eq('kode_promo', kode.toUpperCase())
+      .gte('berlaku_hingga', today)
+      .limit(1);
+    if (error || !data || data.length === 0) return null;
+    return data[0] as Promo;
+  },
+
+  async savePromo(p: Omit<Promo, 'id_promo'> & { id_promo?: number }): Promise<Promo> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    const isNew = !p.id_promo;
+    const payload = { kode_promo: p.kode_promo.toUpperCase(), diskon: p.diskon, berlaku_hingga: p.berlaku_hingga || null, keterangan: p.keterangan || '' };
+    let result;
+    if (isNew) {
+      result = await supabase.from('promo').insert([payload]).select();
+    } else {
+      result = await supabase.from('promo').update(payload).eq('id_promo', p.id_promo).select();
+    }
+    if (result.error) throw new Error(result.error.message);
+    return result.data![0] as Promo;
+  },
+
+  async deletePromo(id: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('promo').delete().eq('id_promo', id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  // 9. REVIEW SERVICES
+  async getReviewsByProduct(id_produk: number): Promise<Review[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('review')
+          .select('*, users(nama_lengkap)')
+          .eq('id_produk', id_produk)
+          .order('created_at', { ascending: false });
+        if (!error && data) {
+          return data.map((r: any) => ({
+            ...r,
+            nama_user: r.users?.nama_lengkap || 'Anonim'
+          })) as Review[];
+        }
+        console.warn('Review fetch failed:', error);
+      } catch (err) { console.error(err); }
+    }
+    return [];
+  },
+
+  async saveReview(r: { id_produk: number; id_user: number; rating: number; komentar?: string; id_pesanan?: number }): Promise<Review> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    const { data, error } = await supabase.from('review').insert([r]).select();
+    if (error) throw new Error(error.message);
+    return data![0] as Review;
+  },
+
+  async hasUserPurchasedProduct(id_user: number, id_produk: number): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      const { data, error } = await supabase
+        .from('pesanan')
+        .select('id_pesanan, status_pesanan, detail_pesanan!inner(id_produk)')
+        .eq('id_user', id_user)
+        .eq('detail_pesanan.id_produk', id_produk)
+        .not('status_pesanan', 'eq', 'batal')
+        .limit(1);
+        
+      if (error) {
+        console.warn('hasUserPurchasedProduct error:', error);
+        return false;
+      }
+      return data && data.length > 0;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  },
+
+  // 10. PEMBAYARAN SERVICES
+  async getAllPembayaran(): Promise<Pembayaran[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('pembayaran')
+          .select('*')
+          .order('id_pembayaran', { ascending: false });
+        if (!error && data) return data as Pembayaran[];
+        console.warn('Pembayaran fetch failed:', error);
+      } catch (err) { console.error(err); }
+    }
+    return [];
+  },
+
+  async savePembayaran(p: Omit<Pembayaran, 'id_pembayaran'>): Promise<Pembayaran> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    const { data, error } = await supabase.from('pembayaran').insert([p]).select();
+    if (error) throw new Error(error.message);
+    return data![0] as Pembayaran;
+  },
+
+  async updatePembayaranStatus(id: number, status: 'menunggu' | 'berhasil' | 'gagal', extra?: Partial<Pembayaran>): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('pembayaran').update({ status, ...extra }).eq('id_pembayaran', id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  // 11. PENGIRIMAN SERVICES
+  async getAllPengiriman(): Promise<Pengiriman[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('pengiriman')
+          .select('*')
+          .order('id_pengiriman', { ascending: false });
+        if (!error && data) return data as Pengiriman[];
+        console.warn('Pengiriman fetch failed:', error);
+      } catch (err) { console.error(err); }
+    }
+    return [];
+  },
+
+  async savePengiriman(p: Omit<Pengiriman, 'id_pengiriman'>): Promise<Pengiriman> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    const { data, error } = await supabase.from('pengiriman').insert([p]).select();
+    if (error) throw new Error(error.message);
+    return data![0] as Pengiriman;
+  },
+
+  async updatePengiriman(id: number, updates: Partial<Pengiriman>): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('pengiriman').update(updates).eq('id_pengiriman', id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  // 12. STOK LOG SERVICES
+  async getStokLog(): Promise<StokLog[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('stok_log')
+          .select('*, produk(nama_produk)')
+          .order('tanggal', { ascending: false })
+          .limit(100);
+        if (!error && data) {
+          return data.map((s: any) => ({
+            ...s,
+            nama_produk: s.produk?.nama_produk || '—'
+          })) as StokLog[];
+        }
+        console.warn('StokLog fetch failed:', error);
+      } catch (err) { console.error(err); }
+    }
+    return [];
+  },
+
+  async addStokLog(log: Omit<StokLog, 'id_stok' | 'tanggal' | 'nama_produk'>): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('stok_log').insert([{ ...log, tanggal: new Date().toISOString() }]);
+    if (error) { console.error('StokLog insert failed:', error); return false; }
+    return true;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 13. USER AUTH SERVICES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async registerUser(data: { nama_lengkap: string; email: string; password: string; no_telepon?: string; alamat?: string }): Promise<User> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    // Check if email already exists
+    const { data: existing } = await supabase.from('users').select('id_user').eq('email', data.email).limit(1);
+    if (existing && existing.length > 0) throw new Error('Email sudah terdaftar. Silakan gunakan email lain.');
+    const { data: result, error } = await supabase
+      .from('users')
+      .insert([{ nama_lengkap: data.nama_lengkap, email: data.email, password: data.password, no_telepon: data.no_telepon || '', alamat: data.alamat || '' }])
+      .select();
+    if (error) throw new Error(error.message);
+    const user = result![0] as User;
+    // Strip password from returned object
+    const { password: _pw, ...safeUser } = user;
+    return safeUser as User;
+  },
+
+  async loginUser(email: string, password: string): Promise<User> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email.trim().toLowerCase())
+      .eq('password', password)
+      .limit(1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error('Email atau password salah.');
+    const user = data[0] as User;
+    const { password: _pw, ...safeUser } = user;
+    return safeUser as User;
+  },
+
+  async updateUserProfile(id_user: number, updates: Partial<Pick<User, 'nama_lengkap' | 'no_telepon' | 'alamat'>>): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('users').update(updates).eq('id_user', id_user);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 14. KERANJANG (DB-BACKED CART) SERVICES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async getKeranjang(id_user: number): Promise<KeranjangItem[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase
+        .from('keranjang')
+        .select('*, produk(nama_produk, harga, gambar)')
+        .eq('id_user', id_user);
+      if (error) { console.warn('Keranjang fetch failed:', error); return []; }
+      return (data || []).map((row: any) => ({
+        id_keranjang: row.id_keranjang,
+        id_user: row.id_user,
+        id_produk: row.id_produk,
+        jumlah: row.jumlah,
+        ukuran: row.ukuran || '',
+        nama_produk: row.produk?.nama_produk || '',
+        harga: row.produk?.harga || 0,
+        gambar: row.produk?.gambar || '',
+      })) as KeranjangItem[];
+    } catch (err) { console.error(err); return []; }
+  },
+
+  async upsertKeranjang(item: { id_user: number; id_produk: number; jumlah: number; ukuran?: string }): Promise<boolean> {
+    if (!supabase) return false;
+    // Try to find existing row for this user+product+ukuran
+    const { data: existing } = await supabase
+      .from('keranjang')
+      .select('id_keranjang, jumlah')
+      .eq('id_user', item.id_user)
+      .eq('id_produk', item.id_produk)
+      .eq('ukuran', item.ukuran || '')
+      .limit(1);
+    if (existing && existing.length > 0) {
+      const { error } = await supabase
+        .from('keranjang')
+        .update({ jumlah: item.jumlah })
+        .eq('id_keranjang', existing[0].id_keranjang);
+      if (error) { console.error(error); return false; }
+    } else {
+      const { error } = await supabase
+        .from('keranjang')
+        .insert([{ id_user: item.id_user, id_produk: item.id_produk, jumlah: item.jumlah, ukuran: item.ukuran || '' }]);
+      if (error) { console.error(error); return false; }
+    }
+    return true;
+  },
+
+  async removeFromKeranjang(id_user: number, id_produk: number, ukuran?: string): Promise<boolean> {
+    if (!supabase) return false;
+    const query = supabase.from('keranjang').delete().eq('id_user', id_user).eq('id_produk', id_produk);
+    if (ukuran !== undefined) query.eq('ukuran', ukuran);
+    const { error } = await query;
+    if (error) { console.error(error); return false; }
+    return true;
+  },
+
+  async clearKeranjangDB(id_user: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('keranjang').delete().eq('id_user', id_user);
+    if (error) { console.error(error); return false; }
+    return true;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 15. NOTIFIKASI SERVICES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async getNotifikasiUser(id_user: number): Promise<Notifikasi[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase
+        .from('notifikasi')
+        .select('*')
+        .eq('id_user', id_user)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) { console.warn('Notifikasi fetch failed:', error); return []; }
+      return (data || []) as Notifikasi[];
+    } catch (err) { console.error(err); return []; }
+  },
+
+  async markNotifikasiRead(id_notifikasi: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('notifikasi').update({ is_read: true }).eq('id_notifikasi', id_notifikasi);
+    if (error) { console.error(error); return false; }
+    return true;
+  },
+
+  async markAllNotifikasiRead(id_user: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('notifikasi').update({ is_read: true }).eq('id_user', id_user).eq('is_read', false);
+    if (error) { console.error(error); return false; }
+    return true;
+  },
+
+  async createNotifikasi(id_user: number, pesan: string, tipe: string = 'info'): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('notifikasi').insert([{ id_user, pesan, tipe, is_read: false }]);
+    if (error) { console.error('Notifikasi insert failed:', error); return false; }
+    return true;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 16. CUSTOM SIZE SERVICES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async getSizesByProduct(id_produk: number): Promise<CustomSize[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase
+        .from('custom_size')
+        .select('*')
+        .eq('id_produk', id_produk)
+        .order('ukuran');
+      if (error) { console.warn('CustomSize fetch failed:', error); return []; }
+      return (data || []) as CustomSize[];
+    } catch (err) { console.error(err); return []; }
+  },
+
+  async getAllSizes(): Promise<CustomSize[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase
+        .from('custom_size')
+        .select('*, produk(nama_produk)')
+        .order('id_produk');
+      if (error) { console.warn('AllSizes fetch failed:', error); return []; }
+      return (data || []).map((s: any) => ({ ...s, nama_produk: s.produk?.nama_produk || '—' })) as CustomSize[];
+    } catch (err) { console.error(err); return []; }
+  },
+
+  async saveSize(s: Omit<CustomSize, 'id_size' | 'nama_produk'> & { id_size?: number }): Promise<CustomSize> {
+    if (!supabase) throw new Error('Supabase tidak terhubung');
+    const payload = { id_produk: s.id_produk, ukuran: s.ukuran, panjang_cm: s.panjang_cm || null, lebar_cm: s.lebar_cm || null, harga_tambahan: s.harga_tambahan || 0, keterangan: s.keterangan || '' };
+    let result;
+    if (!s.id_size) {
+      result = await supabase.from('custom_size').insert([payload]).select();
+    } else {
+      result = await supabase.from('custom_size').update(payload).eq('id_size', s.id_size).select();
+    }
+    if (result.error) throw new Error(result.error.message);
+    return result.data![0] as CustomSize;
+  },
+
+  async deleteSize(id_size: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('custom_size').delete().eq('id_size', id_size);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  async syncProductSizes(id_produk: number, ukuranList: string[]): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      // Delete old sizes
+      await supabase.from('custom_size').delete().eq('id_produk', id_produk);
+      
+      if (ukuranList.length > 0) {
+        // Insert new sizes
+        const payloads = ukuranList.map(ukuran => ({
+          id_produk,
+          ukuran,
+          harga_tambahan: 0,
+        }));
+        await supabase.from('custom_size').insert(payloads);
+      }
+      return true;
+    } catch (err) {
+      console.error('syncProductSizes failed', err);
+      return false;
+    }
+  },
 };
 
+
 // HIGH FIDELITY SQL SCHEMA FOR AUTO-SETUP
-export const supabaseSQL = `-- 1. BUAT TABLE PRODUCTS SECARA OTOMATIS
+export const supabaseSQL = `-- LEGACY SCHEMA (superseded by actual Supabase schema)
+
 CREATE TABLE IF NOT EXISTS public.products (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,

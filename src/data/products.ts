@@ -10,9 +10,9 @@ export const PRODUCTS: Product[] = [
     description: 'Kain Tenun Ikat Sumba asli dengan motif Kuda Sumba (Sandalwood pony) yang melambangkan keanggunan, keberanian, dan status sosial tinggi. Diwarnai secara eksklusif menggunakan pewarna alam lokal seperti akar pohon mengkudu untuk warna merah marun dan daun tarum untuk warna biru tua.',
     isFeatured: true,
     code: 'TIS-KUD0A',
-    dimensions: '240 x 110 cm',
+
     weaver: 'Mama Seraphine Weetebula',
-    makingTime: '6 Bulan'
+
   },
   {
     id: '2',
@@ -23,9 +23,9 @@ export const PRODUCTS: Product[] = [
     description: 'Tas selempang serbaguna yang menggabungkan potongan kain tenun ikat berkualitas tinggi dengan aksen kulit sapi asli. Ringkas, elegan, dan dilengkapi furing tebal serta ritsleting logam premium di bagian dalam.',
     isFeatured: true,
     code: 'TAS-SLP01',
-    dimensions: '25 x 20 x 8 cm',
+
     weaver: 'Kelompok Perempuan Wanno',
-    makingTime: '2 Minggu'
+
   },
   {
     id: '3',
@@ -36,9 +36,9 @@ export const PRODUCTS: Product[] = [
     description: 'Selendang tenun halus dikerjakan menggunakan katun pintal tangan (handspun cotton). Menampilkan garis-garis geometris khas pesisir Sumba Barat dengan rumbai ikatan khas buatan tangan perajin.',
     isFeatured: true,
     code: 'SLD-ALM02',
-    dimensions: '180 x 45 cm',
+
     weaver: 'Mama Yuliana',
-    makingTime: '1.5 Bulan'
+
   },
   {
     id: '4',
@@ -49,9 +49,9 @@ export const PRODUCTS: Product[] = [
     description: 'Sarung tenun Pahikung (Lau Pahudu) yang dibuat melalui proses pakan tambahan yang sangat rumit. Menghasilkan pola visual timbul bernuansa megah yang menceritakan mitologi kuno Marapu Sumba.',
     isFeatured: true,
     code: 'SRG-PAH04',
-    dimensions: '160 x 120 cm',
+
     weaver: 'Mama Maria Weetebula',
-    makingTime: '8 Bulan'
+
   },
   {
     id: '5',
@@ -62,9 +62,9 @@ export const PRODUCTS: Product[] = [
     description: 'Set dompet clutch dan saku kosmetik terbuat dari upcycling kain tenun tradisional yang dipreservasi. Penuh warna, ramah lingkungan, sekaligus mendukung penuh ekonomi sirkular perempuan penenun.',
     isFeatured: false,
     code: 'AKS-DMP05',
-    dimensions: '20 x 12 cm',
+
     weaver: 'Penenun Muda Seraphine',
-    makingTime: '1 Minggu'
+
   },
   {
     id: '6',
@@ -75,9 +75,9 @@ export const PRODUCTS: Product[] = [
     description: 'Table runner tenun tebal dengan motif etnik simetris rona bumi untuk memperindah meja kayu. Melindungi permukaan meja sekaligus memperkuat aksen Nusantara di ruangan Anda.',
     isFeatured: false,
     code: 'DKR-TBL06',
-    dimensions: '200 x 35 cm',
+
     weaver: 'Mama Paulina',
-    makingTime: '2 Bulan'
+
   },
   {
     id: '7',
@@ -88,9 +88,9 @@ export const PRODUCTS: Product[] = [
     description: 'Mahakarya kain ikat dari daerah Kambera dengan warna jingga kecokelatan legendaris dari kayu kombu. Menampilkan ilustrasi Andung (Pohon Tengkorak) ikonik warisan mitologi Sumba kuno.',
     isFeatured: false,
     code: 'TIS-KAM07',
-    dimensions: '220 x 105 cm',
+
     weaver: 'Mama Seraphine Weetebula',
-    makingTime: '5 Bulan'
+
   },
   {
     id: '8',
@@ -101,8 +101,8 @@ export const PRODUCTS: Product[] = [
     description: 'Sepasang sarung bantal kursi dengan panel depan tenun ikat motif Burung Kaka (Kakatua) yang melambangkan musyawarah desa, keramahan, serta kesetiaan.',
     isFeatured: false,
     code: 'DKR-BTL08',
-    dimensions: '45 x 45 cm (2 pcs)',
+
     weaver: 'Koperasi Perempuan Weetebula',
-    makingTime: '10 Hari'
+
   }
 ];

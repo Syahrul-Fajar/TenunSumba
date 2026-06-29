@@ -7,16 +7,18 @@ import EdukasiView from './components/EdukasiView';
 import ContactView from './components/ContactView';
 import AdminView from './components/AdminView';
 import ProductDetailModal from './components/ProductDetailModal';
-import { Product } from './types';
+import AuthModal from './components/AuthModal';
+import { Product, User, Notifikasi } from './types';
 import { dbService, isSupabaseConfigured, supabase } from './lib/supabase';
 
 type Tab = 'home' | 'produk' | 'edukasi' | 'kontak' | 'admin';
 
-import { X, Trash2, ShoppingBag, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Trash2, ShoppingBag, CheckCircle2, AlertCircle, Tag } from 'lucide-react';
 
 interface CartItem {
   product: Product;
   quantity: number;
+  ukuran?: string;
 }
 
 export default function App() {
@@ -48,61 +50,158 @@ export default function App() {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderError, setOrderError] = useState('');
 
-  // Load cart from LocalStorage on mount
+  // Promo Code States
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<{ kode: string; diskon: number } | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState('');
+  const [promoSuccess, setPromoSuccess] = useState('');
+
+  // User Auth States
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = sessionStorage.getItem('seraphine_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    sessionStorage.setItem('seraphine_user', JSON.stringify(user));
+    syncKeranjangFromDB(user.id_user);
+    checkNotif(user.id_user);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    sessionStorage.removeItem('seraphine_user');
+    setCartItems([]);
+    localStorage.removeItem('seraphine_cart');
+  };
+
+  const checkNotif = async (userId: number) => {
+    const notifs = await dbService.getNotifikasiUser(userId);
+    setUnreadNotifCount(notifs.filter(n => !n.is_read).length);
+  };
+
+  // Sync Keranjang dari DB saat login
+  const syncKeranjangFromDB = async (userId: number) => {
+    const dbCart = await dbService.getKeranjang(userId);
+    if (dbCart.length > 0) {
+      // Map DB cart to local CartItem structure
+      const newCartItems: CartItem[] = dbCart.map(item => ({
+        product: { id: item.id_produk.toString(), title: item.nama_produk!, price: item.harga!, image: item.gambar!, category: '', description: '', isFeatured: false, code: '', weaver: '', makingTime: '' },
+        quantity: item.jumlah,
+        ukuran: item.ukuran
+      }));
+      setCartItems(newCartItems);
+      localStorage.setItem('seraphine_cart', JSON.stringify(newCartItems));
+    }
+  };
+
+  // Load cart from LocalStorage on mount (or DB if logged in)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('seraphine_cart');
-      if (stored) {
-        setCartItems(JSON.parse(stored));
+    if (currentUser) {
+      syncKeranjangFromDB(currentUser.id_user);
+      checkNotif(currentUser.id_user);
+    } else {
+      try {
+        const stored = localStorage.getItem('seraphine_cart');
+        if (stored) setCartItems(JSON.parse(stored));
+      } catch (err) {
+        console.error('Gagal memuat keranjang belanja:', err);
       }
-    } catch (err) {
-      console.error('Gagal memuat keranjang belanja:', err);
     }
   }, []);
 
   // Save cart to LocalStorage on changes
   const saveCart = (items: CartItem[]) => {
     setCartItems(items);
-    try {
-      localStorage.setItem('seraphine_cart', JSON.stringify(items));
-    } catch (err) {
-      console.error('Gagal menyimpan keranjang belanja:', err);
+    if (!currentUser) {
+      try {
+        localStorage.setItem('seraphine_cart', JSON.stringify(items));
+      } catch (err) {
+        console.error('Gagal menyimpan keranjang belanja:', err);
+      }
     }
   };
 
-  const addToCart = (product: Product, qty: number) => {
-    const existingIdx = cartItems.findIndex(item => item.product.id === product.id);
+  const addToCart = async (product: Product, qty: number, ukuran?: string) => {
+    const existingIdx = cartItems.findIndex(item => item.product.id === product.id && item.ukuran === ukuran);
     const updated = [...cartItems];
+    let newQty = qty;
     if (existingIdx !== -1) {
       const maxStock = product.stock ?? 5;
-      updated[existingIdx].quantity = Math.min(maxStock, updated[existingIdx].quantity + qty);
+      newQty = Math.min(maxStock, updated[existingIdx].quantity + qty);
+      updated[existingIdx].quantity = newQty;
     } else {
-      updated.push({ product, quantity: qty });
+      updated.push({ product, quantity: qty, ukuran });
     }
+    
     saveCart(updated);
+    
+    if (currentUser) {
+      await dbService.upsertKeranjang({ id_user: currentUser.id_user, id_produk: Number(product.id), jumlah: newQty, ukuran });
+    }
     setIsCartOpen(true); // Auto-open cart drawer for feedback!
   };
 
-  const removeFromCart = (productId: string) => {
-    const updated = cartItems.filter(item => item.product.id !== productId);
+  const removeFromCart = async (productId: string, ukuran?: string) => {
+    const updated = cartItems.filter(item => !(item.product.id === productId && item.ukuran === ukuran));
     saveCart(updated);
+    if (currentUser) {
+      await dbService.removeFromKeranjang(currentUser.id_user, Number(productId), ukuran);
+    }
   };
 
-  const updateCartQuantity = (productId: string, qty: number) => {
+  const updateCartQuantity = async (productId: string, qty: number, ukuran?: string) => {
+    let finalQty = qty;
     const updated = cartItems.map(item => {
-      if (item.product.id === productId) {
+      if (item.product.id === productId && item.ukuran === ukuran) {
         const maxStock = item.product.stock ?? 5;
-        return { ...item, quantity: Math.max(1, Math.min(maxStock, qty)) };
+        finalQty = Math.max(1, Math.min(maxStock, qty));
+        return { ...item, quantity: finalQty };
       }
       return item;
     });
     saveCart(updated);
+    if (currentUser) {
+      await dbService.upsertKeranjang({ id_user: currentUser.id_user, id_produk: Number(productId), jumlah: finalQty, ukuran });
+    }
   };
 
-  const clearCart = () => {
+  const clearCart = async () => {
     saveCart([]);
     setIsCheckoutMode(false);
     setCheckoutForm({ name: '', phone: '', address: '' });
+    setAppliedPromo(null);
+    setPromoInput('');
+    setPromoError('');
+    setPromoSuccess('');
+    if (currentUser) {
+      await dbService.clearKeranjangDB(currentUser.id_user);
+    }
+  };
+
+  const handleApplyPromo = async () => {
+    if (!promoInput.trim()) return;
+    setPromoLoading(true);
+    setPromoError('');
+    setPromoSuccess('');
+    try {
+      const promo = await dbService.verifyPromo(promoInput.trim());
+      if (promo) {
+        setAppliedPromo({ kode: promo.kode_promo, diskon: promo.diskon });
+        setPromoSuccess(`Promo "${promo.kode_promo}" berhasil! Diskon ${promo.diskon}%`);
+      } else {
+        setPromoError('Kode promo tidak valid atau sudah kadaluarsa.');
+        setAppliedPromo(null);
+      }
+    } catch {
+      setPromoError('Gagal memvalidasi promo.');
+    } finally {
+      setPromoLoading(false);
+    }
   };
 
   const refreshCatalog = useCallback(async () => {
@@ -162,7 +261,9 @@ export default function App() {
     setIsSubmittingOrder(true);
     setOrderError('');
     
-    const totalPrice = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const subtotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const diskonNominal = appliedPromo ? Math.round(subtotal * appliedPromo.diskon / 100) : 0;
+    const totalPrice = subtotal - diskonNominal;
     const orderItems = cartItems.map(item => ({
       productId: item.product.id,
       productTitle: item.product.title,
@@ -172,18 +273,34 @@ export default function App() {
     }));
 
     try {
-      await dbService.createOrder({
+      const order = await dbService.createOrder({
         customerName: checkoutForm.name,
         customerEmail: '—',
         customerPhone: checkoutForm.phone,
         customerAddress: checkoutForm.address,
         items: orderItems,
         totalPrice,
-        status: 'menunggu'
+        status: 'menunggu',
+        promoKode: appliedPromo?.kode,
+        diskon: diskonNominal
       });
+
+      // Auto-create pembayaran record
+      if (order && order.id) {
+        try {
+          await dbService.savePembayaran({
+            id_pesanan: Number(order.id),
+            metode: 'Transfer Bank',
+            status: 'menunggu',
+            jumlah: totalPrice
+          });
+        } catch (payErr) {
+          console.warn('Pembayaran record creation failed (non-critical):', payErr);
+        }
+      }
       
       setOrderSuccess(true);
-      refreshCatalog(); // Refresh catalog to deduct stock
+      refreshCatalog();
       setTimeout(() => {
         setIsCartOpen(false);
         setOrderSuccess(false);
@@ -197,7 +314,9 @@ export default function App() {
   };
 
   const totalCartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const totalCartPrice = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const subtotalCartPrice = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const diskonNominal = appliedPromo ? Math.round(subtotalCartPrice * appliedPromo.diskon / 100) : 0;
+  const totalCartPrice = subtotalCartPrice - diskonNominal;
   const isPublicView = currentTab !== 'admin';
 
   const formatPrice = (n: number) =>
@@ -212,8 +331,19 @@ export default function App() {
           setCurrentTab={changeTab} 
           cartCount={totalCartCount} 
           onOpenCart={() => { setIsCartOpen(true); setIsCheckoutMode(false); }} 
+          currentUser={currentUser}
+          unreadNotifCount={unreadNotifCount}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+          onLogout={handleLogout}
+          onOpenNotif={() => { /* TODO: Open Notification modal */ }}
         />
       )}
+
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+        onLoginSuccess={handleLoginSuccess} 
+      />
 
       <main className="flex-grow flex flex-col">
         {currentTab === 'home' && <HomeView setCurrentTab={changeTab} onSelectProduct={setSelectedProduct} products={products} />}
@@ -227,6 +357,7 @@ export default function App() {
         product={selectedProduct} 
         onClose={() => setSelectedProduct(null)} 
         onAddToCart={addToCart} 
+        currentUser={currentUser}
       />
 
       {isPublicView && <Footer setCurrentTab={changeTab} />}
@@ -303,12 +434,35 @@ export default function App() {
                     <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Alamat Lengkap Pengiriman *</label>
                     <textarea 
                       required 
-                      rows={4}
+                      rows={3}
                       value={checkoutForm.address} 
                       onChange={e => setCheckoutForm({...checkoutForm, address: e.target.value})}
                       className="w-full px-4 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl text-[#1A1A1A] focus:outline-none focus:border-[#7B1618] transition-colors resize-none"
                       placeholder="Contoh: Jl. Diponegoro No. 45, Kecamatan Tambolaka, Kabupaten Sumba Barat Daya, NTT"
                     />
+                  </div>
+                  {/* Promo Code Input */}
+                  <div>
+                    <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Kode Promo (Opsional)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Contoh: SUMBA20"
+                        value={promoInput}
+                        onChange={e => { setPromoInput(e.target.value.toUpperCase()); setPromoError(''); setPromoSuccess(''); }}
+                        disabled={!!appliedPromo}
+                        className="flex-1 px-4 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl text-[#1A1A1A] focus:outline-none focus:border-[#7B1618] transition-colors font-mono uppercase"
+                      />
+                      {appliedPromo ? (
+                        <button type="button" onClick={() => { setAppliedPromo(null); setPromoInput(''); setPromoSuccess(''); setPromoError(''); }} className="px-3 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-xl">Hapus</button>
+                      ) : (
+                        <button type="button" onClick={handleApplyPromo} disabled={promoLoading || !promoInput.trim()} className="px-3 py-2 bg-[#7B1618] text-white text-xs font-bold rounded-xl disabled:opacity-50">
+                          {promoLoading ? '...' : <Tag className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                    {promoError && <p className="mt-1 text-[10px] text-red-600 font-semibold">{promoError}</p>}
+                    {promoSuccess && <p className="mt-1 text-[10px] text-emerald-700 font-semibold">{promoSuccess}</p>}
                   </div>
                 </form>
               ) : cartItems.length === 0 ? (
@@ -320,21 +474,26 @@ export default function App() {
               ) : (
                 <div className="space-y-4">
                   {cartItems.map(item => (
-                    <div key={item.product.id} className="flex gap-4 p-3.5 bg-white border border-[#F1F5F9] rounded-2xl shadow-sm">
+                    <div key={`${item.product.id}-${item.ukuran || 'default'}`} className="flex gap-4 p-3.5 bg-white border border-[#F1F5F9] rounded-2xl shadow-sm">
                       <img src={item.product.image} alt={item.product.title} className="w-16 h-16 object-cover rounded-xl bg-[#F8FAFC]" />
                       <div className="flex-1 min-w-0">
                         <span className="text-[8px] font-mono text-gray-400 uppercase">{item.product.code}</span>
                         <h4 className="font-serif font-bold text-xs text-[#1A1A1A] truncate">{item.product.title}</h4>
+                        {item.ukuran && (
+                          <span className="inline-block mt-1 px-1.5 py-0.5 bg-gray-100 text-[#64748B] text-[10px] font-mono font-bold rounded">
+                            {item.ukuran}
+                          </span>
+                        )}
                         <p className="font-mono text-xs font-bold text-[#7B1618] mt-1">{formatPrice(item.product.price)}</p>
                         
                         <div className="flex items-center justify-between mt-2.5">
                           <div className="flex items-center bg-[#FFFFFF] border border-[#F1F5F9] rounded-lg p-0.5">
-                            <button onClick={() => updateCartQuantity(item.product.id, item.quantity - 1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold">-</button>
+                            <button onClick={() => updateCartQuantity(item.product.id, item.quantity - 1, item.ukuran)} className="w-6 h-6 flex items-center justify-center text-xs font-bold">-</button>
                             <span className="w-6 text-center font-bold text-xs text-[#1A1A1A]">{item.quantity}</span>
-                            <button onClick={() => updateCartQuantity(item.product.id, item.quantity + 1)} className="w-6 h-6 flex items-center justify-center text-xs font-bold">+</button>
+                            <button onClick={() => updateCartQuantity(item.product.id, item.quantity + 1, item.ukuran)} className="w-6 h-6 flex items-center justify-center text-xs font-bold">+</button>
                           </div>
                           
-                          <button onClick={() => removeFromCart(item.product.id)} className="p-1.5 text-gray-400 hover:text-red-600 transition-colors">
+                          <button onClick={() => removeFromCart(item.product.id, item.ukuran)} className="p-1.5 text-gray-400 hover:text-red-600 transition-colors">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -348,6 +507,18 @@ export default function App() {
             {/* Footer Summary / Checkout Trigger */}
             {cartItems.length > 0 && !orderSuccess && (
               <div className="p-5 bg-white border-t border-[#F1F5F9] space-y-4">
+                {appliedPromo && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-xs text-gray-500">
+                      <span>Subtotal</span>
+                      <span className="font-mono">{formatPrice(subtotalCartPrice)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-emerald-700 font-bold">
+                      <span>Diskon {appliedPromo.kode} ({appliedPromo.diskon}%)</span>
+                      <span className="font-mono">- {formatPrice(diskonNominal)}</span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold text-[#64748B]">Total Pembayaran</span>
                   <span className="text-lg font-bold text-[#7B1618] font-mono">{formatPrice(totalCartPrice)}</span>

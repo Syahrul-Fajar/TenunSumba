@@ -1,33 +1,93 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, ShoppingBag, Ruler } from 'lucide-react';
-import { Product } from '../types';
+import { X, Calendar, ShoppingBag, Ruler, Star, Send } from 'lucide-react';
+import { Product, CustomSize, Review, User } from '../types';
+import { dbService } from '../lib/supabase';
 
 interface ProductDetailModalProps {
   product: Product | null;
   onClose: () => void;
-  onAddToCart: (product: Product, quantity: number) => void;
+  onAddToCart: (product: Product, quantity: number, ukuran?: string) => void;
+  currentUser?: User | null;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 
-export default function ProductDetailModal({ product, onClose, onAddToCart }: ProductDetailModalProps) {
+export default function ProductDetailModal({ product, onClose, onAddToCart, currentUser }: ProductDetailModalProps) {
   const [quantity, setQuantity] = useState(1);
+  const [sizes, setSizes] = useState<CustomSize[]>([]);
+  const [selectedSize, setSelectedSize] = useState<string>('');
+
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isBuyer, setIsBuyer] = useState(false);
+  const [newRating, setNewRating] = useState(5);
+  const [newKomentar, setNewKomentar] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   useEffect(() => {
     if (product) {
       document.body.style.overflow = 'hidden';
       setQuantity(1);
+      setSelectedSize('');
+      setNewRating(5);
+      setNewKomentar('');
+      
+      dbService.getSizesByProduct(Number(product.id)).then(list => {
+        if (list && list.length > 0) {
+          setSizes(list);
+          setSelectedSize(list[0].ukuran);
+        } else {
+          setSizes([{ id_size: 0, id_produk: Number(product.id), ukuran: 'All Size', harga_tambahan: 0 }]);
+          setSelectedSize('All Size');
+        }
+      });
+      
+      dbService.getReviewsByProduct(Number(product.id)).then(list => setReviews(list));
+      
+      if (currentUser) {
+        dbService.hasUserPurchasedProduct(currentUser.id_user, Number(product.id)).then(purchased => {
+          setIsBuyer(purchased);
+        });
+      } else {
+        setIsBuyer(false);
+      }
+      
     } else {
       document.body.style.overflow = '';
+      setSizes([]);
+      setReviews([]);
+      setIsBuyer(false);
     }
-    return () => { document.body.style.overflow = ''; };
-  }, [product]);
+  }, [product, currentUser]);
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!product || !currentUser || !isBuyer) return;
+    setSubmittingReview(true);
+    try {
+      await dbService.saveReview({
+        id_produk: Number(product.id),
+        id_user: currentUser.id_user,
+        rating: newRating,
+        komentar: newKomentar
+      });
+      // Refresh reviews
+      const updatedReviews = await dbService.getReviewsByProduct(Number(product.id));
+      setReviews(updatedReviews);
+      setNewKomentar('');
+      setNewRating(5);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengirim ulasan');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   if (!product) return null;
   const isOutOfStock = (product.stock ?? 5) <= 0;
 
   const handleAdd = () => {
-    onAddToCart(product, quantity);
+    onAddToCart(product, quantity, selectedSize || undefined);
     onClose();
   };
 
@@ -77,18 +137,29 @@ export default function ProductDetailModal({ product, onClose, onAddToCart }: Pr
                   <p className="text-xs text-[#475569] leading-relaxed italic">"{product.maknaMotif}"</p>
                 </div>
               )}
+            </div>
 
-              <div className="grid grid-cols-2 gap-4 py-4 border-y border-[#F1F5F9]">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-[#F1F5F9] flex items-center justify-center text-[#7B1618]"><Ruler className="w-5 h-5" /></div>
-                  <div><span className="block text-[10px] font-mono uppercase tracking-widest text-[#64748B]">Dimensi</span><span className="block text-sm font-bold text-[#1A1A1A]">{product.dimensions || '—'}</span></div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-[#F1F5F9] flex items-center justify-center text-[#7B1618]"><Calendar className="w-5 h-5" /></div>
-                  <div><span className="block text-[10px] font-mono uppercase tracking-widest text-[#64748B]">Pengerjaan</span><span className="block text-sm font-bold text-[#1A1A1A]">{product.makingTime}</span></div>
+            {/* Pilihan Ukuran */}
+            {sizes.length > 0 && !isOutOfStock && (
+              <div className="mt-6">
+                <span className={labelCls}>Pilih Ukuran</span>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {sizes.map(size => (
+                    <button
+                      key={size.id_size}
+                      onClick={() => setSelectedSize(size.ukuran)}
+                      className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
+                        selectedSize === size.ukuran 
+                          ? 'bg-[#7B1618] text-white border-[#7B1618]' 
+                          : 'bg-white text-[#64748B] border-[#F1F5F9] hover:border-[#7B1618] hover:text-[#7B1618]'
+                      }`}
+                    >
+                      {size.ukuran}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Quantity Selector & Add to Cart Action */}
             {!isOutOfStock && (
@@ -111,6 +182,85 @@ export default function ProductDetailModal({ product, onClose, onAddToCart }: Pr
                 <ShoppingBag className="w-5 h-5" /> {isOutOfStock ? 'Stok Habis' : 'Masukkan ke Keranjang'}
               </button>
             </div>
+
+            {/* ── SEKSI ULASAN (REVIEWS) ── */}
+            <div className="px-6 py-8 border-t border-[#F1F5F9] bg-[#F8FAFC]">
+              <h4 className="font-serif font-bold text-xl text-[#1A1A1A] mb-6 flex items-center gap-2">
+                Ulasan Pelanggan <span className="text-sm font-sans font-normal text-gray-500">({reviews.length})</span>
+              </h4>
+
+              {/* Form Ulasan (Hanya untuk pembeli) */}
+              <div className="mb-8 p-5 bg-white rounded-2xl shadow-sm border border-[#F1F5F9]">
+                {!currentUser ? (
+                  <p className="text-sm text-gray-500 text-center py-2">Silakan Login untuk memberikan ulasan.</p>
+                ) : !isBuyer ? (
+                  <p className="text-sm text-amber-600 text-center py-2 font-medium bg-amber-50 rounded-xl">Anda hanya dapat memberikan ulasan pada produk yang telah Anda beli.</p>
+                ) : (
+                  <form onSubmit={handleSubmitReview} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Rating Bintang</label>
+                      <div className="flex gap-2">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setNewRating(star)}
+                            className={`p-1 transition-colors ${newRating >= star ? 'text-amber-400' : 'text-gray-200'}`}
+                          >
+                            <Star className="w-8 h-8 fill-current" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Tulis Pengalaman Anda</label>
+                      <textarea 
+                        required
+                        rows={3} 
+                        className="w-full px-4 py-3 bg-[#F8FAFC] border border-[#F1F5F9] rounded-xl text-sm focus:ring-2 focus:ring-maroon/20 focus:border-maroon transition-all resize-none"
+                        placeholder="Bagaimana kualitas bahan dan tenunannya?"
+                        value={newKomentar}
+                        onChange={e => setNewKomentar(e.target.value)}
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={submittingReview}
+                      className="w-full sm:w-auto px-6 py-2.5 bg-[#1A1A1A] hover:bg-black text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                    >
+                      <Send className="w-4 h-4" /> {submittingReview ? 'Mengirim...' : 'Kirim Ulasan'}
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              {/* Daftar Ulasan */}
+              <div className="space-y-4">
+                {reviews.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4 italic">Belum ada ulasan untuk karya tenun ini.</p>
+                ) : (
+                  reviews.map(r => (
+                    <div key={r.id_review} className="p-5 bg-white rounded-2xl border border-[#F1F5F9] shadow-sm">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="font-bold text-sm text-[#1A1A1A]">{r.nama_user}</p>
+                          <p className="text-[10px] text-gray-400 font-mono mt-0.5">{new Date(r.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        </div>
+                        <div className="flex gap-0.5">
+                          {[1, 2, 3, 4, 5].map(star => (
+                            <Star key={star} className={`w-3.5 h-3.5 ${r.rating >= star ? 'text-amber-400 fill-current' : 'text-gray-200'}`} />
+                          ))}
+                        </div>
+                      </div>
+                      {r.komentar && (
+                        <p className="text-sm text-gray-600 mt-3 leading-relaxed bg-[#F8FAFC] p-3 rounded-xl border border-[#F1F5F9]">"{r.komentar}"</p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            {/* ── AKHIR SEKSI ULASAN ── */}
           </div>
         </div>
       </div>

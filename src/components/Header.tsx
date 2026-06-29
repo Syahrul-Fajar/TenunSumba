@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ShoppingBag } from 'lucide-react';
+import { Menu, X, ShoppingBag, User, LogOut, Bell } from 'lucide-react';
+import { User as UserType } from '../types';
 
 type Tab = 'home' | 'produk' | 'edukasi' | 'kontak' | 'admin';
 
@@ -8,6 +9,11 @@ interface HeaderProps {
   setCurrentTab: (tab: Tab) => void;
   cartCount: number;
   onOpenCart: () => void;
+  currentUser?: UserType | null;
+  unreadNotifCount?: number;
+  onOpenAuth?: () => void;
+  onLogout?: () => void;
+  onOpenNotif?: () => void;
 }
 
 const NAV = [
@@ -17,7 +23,7 @@ const NAV = [
   { id: 'kontak' as const, label: 'Kontak' },
 ];
 
-export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCart }: HeaderProps) {
+export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCart, currentUser, unreadNotifCount = 0, onOpenAuth, onLogout, onOpenNotif }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -96,40 +102,114 @@ export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCar
             Hubungi Kami
           </button>
           
+          <div className="flex items-center gap-1 ml-4 border-l border-gray-200 pl-4">
+            {/* Notification Bell */}
+            {currentUser && (
+              <button
+                onClick={onOpenNotif}
+                className={`relative p-2 rounded-xl transition-all hover:scale-105 cursor-pointer ${
+                  isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+                }`}
+              >
+                <Bell className="w-5 h-5" />
+                {unreadNotifCount > 0 && (
+                  <span className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold font-mono px-1 rounded-full flex items-center justify-center min-w-3 h-3 shadow border border-[#FFFFFF]">
+                    {unreadNotifCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Shopping Cart */}
+            <button
+              onClick={onOpenCart}
+              className={`relative p-2 rounded-xl transition-all hover:scale-105 cursor-pointer ${
+                isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+              }`}
+            >
+              <ShoppingBag className="w-5 h-5" />
+              {cartCount > 0 && (
+                <span className="absolute top-1 right-1 bg-[#7B1618] text-white text-[8px] font-bold font-mono px-1 rounded-full flex items-center justify-center min-w-3 h-3 shadow border border-[#FFFFFF]">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+
+            {/* User Account / Auth */}
+            <div className="relative group">
+              <button
+                onClick={() => !currentUser && onOpenAuth?.()}
+                className={`flex items-center gap-2 ml-1 p-2 rounded-xl transition-all hover:scale-105 cursor-pointer ${
+                  isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+                }`}
+              >
+                <User className="w-5 h-5" />
+                {currentUser && <span className="text-xs font-bold hidden lg:block">{currentUser.nama_lengkap.split(' ')[0]}</span>}
+              </button>
+
+              {/* User Dropdown */}
+              {currentUser && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-[#F1F5F9] rounded-2xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 z-50 overflow-hidden flex flex-col">
+                  <div className="p-4 border-b border-[#F1F5F9] bg-[#F8FAFC]">
+                    <p className="text-xs font-bold text-[#1A1A1A] truncate">{currentUser.nama_lengkap}</p>
+                    <p className="text-[10px] text-[#64748B] truncate">{currentUser.email}</p>
+                  </div>
+                  <button 
+                    onClick={onLogout}
+                    className="flex items-center gap-2 p-3 text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left font-semibold"
+                  >
+                    <LogOut className="w-4 h-4" /> Keluar
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </nav>
+
+        {/* Toggle Mobile & Cart */}
+        <div className="flex items-center gap-1 md:hidden">
+          {currentUser && (
+            <button
+              onClick={onOpenNotif}
+              className={`relative p-2 rounded-xl transition-colors cursor-pointer ${
+                isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+              }`}
+            >
+              <Bell className="w-5 h-5" />
+              {unreadNotifCount > 0 && (
+                <span className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold font-mono px-1 rounded-full flex items-center justify-center min-w-3 h-3 shadow border border-[#FFFFFF]">
+                  {unreadNotifCount}
+                </span>
+              )}
+            </button>
+          )}
+
           <button
             onClick={onOpenCart}
-            className={`relative ml-2 p-2.5 rounded-xl transition-all hover:scale-105 cursor-pointer ${
+            className={`relative p-2 rounded-xl transition-colors cursor-pointer ${
               isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
             }`}
           >
             <ShoppingBag className="w-5 h-5" />
             {cartCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 bg-[#7B1618] text-white text-[8px] font-bold font-mono px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-4 h-4 shadow border border-[#FFFFFF]">
+              <span className="absolute top-1 right-1 bg-[#7B1618] text-white text-[8px] font-bold font-mono px-1 rounded-full flex items-center justify-center min-w-3 h-3 shadow border border-[#FFFFFF]">
                 {cartCount}
               </span>
             )}
           </button>
-        </nav>
 
-        {/* Toggle Mobile & Cart */}
-        <div className="flex items-center gap-2 md:hidden">
           <button
-            onClick={onOpenCart}
-            className={`relative p-2.5 rounded-xl transition-colors cursor-pointer ${
+            onClick={() => !currentUser && onOpenAuth?.()}
+            className={`p-2 rounded-xl transition-colors cursor-pointer ${
               isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
             }`}
           >
-            <ShoppingBag className="w-5 h-5" />
-            {cartCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 bg-[#7B1618] text-white text-[8px] font-bold font-mono px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-4 h-4 shadow border border-[#FFFFFF]">
-                {cartCount}
-              </span>
-            )}
+            <User className="w-5 h-5" />
           </button>
 
           <button
             onClick={() => setOpen(!open)}
-            className={`p-2.5 rounded-xl transition-colors cursor-pointer ${
+            className={`p-2 rounded-xl transition-colors cursor-pointer ${
               isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
             }`}
             aria-label="Toggle menu"
@@ -148,22 +228,44 @@ export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCar
               <button
                 key={item.id}
                 onClick={() => handleNav(item.id)}
-                className={`flex w-full items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                  isActive 
-                    ? 'bg-[#7B1618] text-white' 
-                    : 'text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#1A1A1A]'
+                className={`block w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-colors ${
+                  isActive ? 'bg-[#7B1618]/10 text-[#7B1618]' : 'text-[#1A1A1A] hover:bg-[#F8FAFC]'
                 }`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-[#7B1618]' : 'bg-[#7B1618]/50'}`} />
                 {item.label}
               </button>
             );
           })}
-          <div className="pt-4 mt-2 border-t border-[#F1F5F9]">
-             <button onClick={() => handleNav('kontak')} className="w-full btn-primary py-3">
-               Hubungi Kami
-             </button>
-          </div>
+          
+          {currentUser ? (
+            <>
+              <div className="px-4 py-2 mt-2 border-t border-[#F1F5F9]">
+                <p className="text-xs text-[#64748B]">Masuk sebagai</p>
+                <p className="text-sm font-bold text-[#1A1A1A]">{currentUser.nama_lengkap}</p>
+              </div>
+              <button
+                onClick={() => {
+                  onLogout?.();
+                  setOpen(false);
+                }}
+                className="block w-full text-left px-4 py-3 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"
+              >
+                Keluar
+              </button>
+            </>
+          ) : (
+            <div className="pt-2 border-t border-[#F1F5F9]">
+              <button
+                onClick={() => {
+                  onOpenAuth?.();
+                  setOpen(false);
+                }}
+                className="block w-full text-left px-4 py-3 rounded-xl text-sm font-bold text-[#7B1618] hover:bg-[#7B1618]/10 transition-colors"
+              >
+                Masuk / Daftar
+              </button>
+            </div>
+          )}
         </div>
       )}
     </header>

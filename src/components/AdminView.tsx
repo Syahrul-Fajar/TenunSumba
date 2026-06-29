@@ -2,9 +2,10 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   Database, Plus, Trash2, Edit, Package, Clock, Mail, Lock,
   AlertCircle, X, RefreshCw, TrendingUp, DollarSign, Users,
-  ShoppingCart, MessageSquare, BarChart3, Layers, Eye, Phone, LogOut, Wifi, WifiOff, Star, BookOpen
+  ShoppingCart, MessageSquare, BarChart3, Layers, Eye, Phone, LogOut, Wifi, WifiOff, Star, BookOpen,
+  Tag, MapPin, Percent, CreditCard, Truck, List, Award, Ruler, Menu
 } from 'lucide-react';
-import { Product, Order, Article } from '../types';
+import { Product, Order, Article, Kategori, Penenun, KelompokPenenun, Promo, Pembayaran, Pengiriman, StokLog, CustomSize, Notifikasi, User } from '../types';
 import { dbService, isSupabaseConfigured, supabase } from '../lib/supabase';
 
 interface AdminViewProps {
@@ -55,42 +56,22 @@ const StatCard = React.memo(({
 ));
 StatCard.displayName = 'StatCard';
 
-// ─── Sub-Component: TabBtn ───────────────────────────────────────────────────
-const TabBtn = ({
+// ─── Sub-Component: SidebarBtn ─────────────────────────────────────────────
+const SidebarBtn = ({
   active, onClick, icon, label, badge
 }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer whitespace-nowrap flex-shrink-0 ${
-      active ? 'bg-maroon text-white shadow-md' : 'text-stone-700 hover:bg-[#F1F5F9]/50 hover:text-stone-900'
+    className={`w-full flex items-center justify-between py-2.5 px-3 rounded-xl transition-all cursor-pointer ${
+      active ? 'bg-[#7B1618]/10 text-[#7B1618] font-bold' : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-stone-800 font-medium'
     }`}
   >
-    {icon}
-    <span>{label}</span>
-    {badge !== undefined && badge > 0 && (
-      <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full font-bold ${active ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700'}`}>
-        {badge}
-      </span>
-    )}
-  </button>
-);
-
-// ─── Sub-Component: BottomTabItem ───────────────────────────────────────────
-const BottomTabItem = ({
-  active, onClick, icon, label, badge
-}: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }) => (
-  <button
-    onClick={onClick}
-    className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all relative cursor-pointer ${
-      active ? 'text-[#7B1618]' : 'text-[#64748B]'
-    }`}
-  >
-    <div className={`p-1 rounded-lg transition-colors ${active ? 'bg-[#7B1618]/10' : ''}`}>
+    <div className="flex items-center gap-3">
       {React.cloneElement(icon as React.ReactElement, { className: 'w-4 h-4' })}
+      <span className="text-xs">{label}</span>
     </div>
-    <span className="text-[8px] font-bold tracking-tight">{label}</span>
     {badge !== undefined && badge > 0 && (
-      <span className="absolute top-1 right-2 bg-[#7B1618] text-white text-[7px] font-bold font-mono px-1 py-0.2 rounded-full min-w-3.5 h-3.5 flex items-center justify-center border border-white">
+      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${active ? 'bg-[#7B1618] text-white' : 'bg-[#F1F5F9] text-[#64748B]'}`}>
         {badge}
       </span>
     )}
@@ -104,8 +85,9 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
   const [authError, setAuthError]         = useState('');
   const [showPass, setShowPass]           = useState(false);
 
-  type AdminTab = 'overview' | 'products' | 'stock' | 'orders' | 'messages' | 'articles' | 'customers';
+  type AdminTab = 'overview' | 'products' | 'stock' | 'sizes' | 'orders' | 'articles' | 'kategori' | 'penenun' | 'promo' | 'pembayaran' | 'pengiriman' | 'notifications';
   const [adminTab, setAdminTab] = useState<AdminTab>('overview');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [products,  setProducts]  = useState<Product[]>([]);
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
@@ -113,17 +95,65 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
   const openConfirm = (title: string, message: string, onConfirm: () => void) => {
     setConfirmModal({ isOpen: true, title, message, onConfirm });
   };
-  const [inquiries, setInquiries] = useState<any[]>([]);
   const [orders,    setOrders]    = useState<Order[]>([]);
   const [articles,  setArticles]  = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [dbSource,  setDbSource]  = useState<'Supabase' | 'LocalStorage'>('LocalStorage');
+
+  // New table states
+  const [kategoriList,  setKategoriList]  = useState<Kategori[]>([]);
+  const [penenunList,   setPenenunList]   = useState<Penenun[]>([]);
+  const [kelompokList,  setKelompokList]  = useState<KelompokPenenun[]>([]);
+  const [promoList,     setPromoList]     = useState<Promo[]>([]);
+  const [pembayaranList,setPembayaranList]= useState<Pembayaran[]>([]);
+  const [pengirimanList,setPengirimanList]= useState<Pengiriman[]>([]);
+  const [stokLog,       setStokLog]       = useState<StokLog[]>([]);
+  const [sizesList,     setSizesList]     = useState<CustomSize[]>([]);
+  const [usersList,     setUsersList]     = useState<User[]>([]);
+
+  // Kategori form
+  const [editKategori, setEditKategori] = useState<Partial<Kategori> | null>(null);
+  const [isKatFormOpen,setIsKatFormOpen] = useState(false);
+  const [katErr, setKatErr] = useState('');
+  const [savingKat, setSavingKat] = useState(false);
+
+  // Penenun form
+  const [editPenenun, setEditPenenun] = useState<Partial<Penenun> | null>(null);
+  const [isPenFormOpen, setIsPenFormOpen] = useState(false);
+  const [penErr, setPenErr] = useState('');
+  const [savingPen, setSavingPen] = useState(false);
+
+  // Kelompok form
+  const [editKelompok, setEditKelompok] = useState<Partial<KelompokPenenun> | null>(null);
+  const [isKelFormOpen, setIsKelFormOpen] = useState(false);
+  const [kelErr, setKelErr] = useState('');
+  const [savingKel, setSavingKel] = useState(false);
+
+  // Promo form
+  const [editPromo, setEditPromo] = useState<Partial<Promo> | null>(null);
+  const [isPromoFormOpen, setIsPromoFormOpen] = useState(false);
+  const [promoErr, setPromoErr] = useState('');
+  const [savingPromo, setSavingPromo] = useState(false);
+
+  // Size form
+  const [editSize, setEditSize] = useState<Partial<CustomSize> | null>(null);
+  const [isSizeFormOpen, setIsSizeFormOpen] = useState(false);
+  const [sizeErr, setSizeErr] = useState('');
+  const [savingSize, setSavingSize] = useState(false);
+
+  // Notification form
+  const [isNotifFormOpen, setIsNotifFormOpen] = useState(false);
+  const [notifTargetUserId, setNotifTargetUserId] = useState<number | null>(null);
+  const [notifPesan, setNotifPesan] = useState('');
+  const [notifTipe, setNotifTipe] = useState('info');
+  const [sendingNotif, setSendingNotif] = useState(false);
 
   // Form States
   const [editProd,    setEditProd]    = useState<Partial<Product> | null>(null);
   const [isFormOpen,  setIsFormOpen]  = useState(false);
   const [formErr,     setFormErr]     = useState('');
   const [savingProd,  setSavingProd]  = useState(false);
+  const [editSizes,   setEditSizes]   = useState<string[]>([]);
 
   const [editArt,       setEditArt]       = useState<Partial<Article> | null>(null);
   const [isArtFormOpen, setIsArtFormOpen] = useState(false);
@@ -131,22 +161,42 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
   const [savingArt,     setSavingArt]     = useState(false);
 
   const [orderFilter, setOrderFilter] = useState<string>('all');
-  const [msgFilter,   setMsgFilter]   = useState<string>('all');
 
   // ── Data Loader Logic ──────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [prodList, inqList, ordList, artList] = await Promise.all([
+      const [prodList, ordList, artList, katList, penList, kelList, promList, bayarList, kirimList, stokList, sizeList] = await Promise.all([
         dbService.getAllProducts(),
-        dbService.getInquiries(),
         dbService.getAllOrders(),
         dbService.getAllArticles(),
+        dbService.getAllKategori(),
+        dbService.getAllPenenun(),
+        dbService.getAllKelompokPenenun(),
+        dbService.getAllPromo(),
+        dbService.getAllPembayaran(),
+        dbService.getAllPengiriman(),
+        dbService.getStokLog(),
+        dbService.getAllSizes()
       ]);
       setProducts(prodList);
-      setInquiries(inqList);
       setOrders(ordList);
       setArticles(artList);
+      setKategoriList(katList);
+      setPenenunList(penList);
+      setKelompokList(kelList);
+      setPromoList(promList);
+      setPembayaranList(bayarList);
+      setPengirimanList(kirimList);
+      setStokLog(stokList);
+      setSizesList(sizeList);
+      
+      // Also fetch users for notification feature if using supabase
+      if (isSupabaseConfigured && supabase) {
+        const { data: uList } = await supabase.from('users').select('id_user, nama_lengkap, email');
+        if (uList) setUsersList(uList as User[]);
+      }
+
       setDbSource(isSupabaseConfigured ? 'Supabase' : 'LocalStorage');
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -176,17 +226,21 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
   }, [isAdmin, loadData]);
 
   // ── Handler Functions ──────────────────────────────────────────────────────
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const userLower = adminUsername.trim().toLowerCase();
-    const passLower = adminPassword.trim().toLowerCase();
-    
-    if ((userLower === 'tenunsumba' && passLower === 'tenunsumba') || 
-        (userLower === 'admin' && (adminPassword === 'admin' || adminPassword === '1234'))) {
-      setIsAdmin(true);
-      setAuthError('');
-    } else {
-      setAuthError('Username atau password salah!');
+    setAuthError('');
+    setIsLoading(true);
+    try {
+      const ok = await dbService.checkAdminCredentials(adminUsername, adminPassword);
+      if (ok) {
+        setIsAdmin(true);
+      } else {
+        setAuthError('Username atau password salah!');
+      }
+    } catch (err) {
+      setAuthError('Gagal melakukan verifikasi admin.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -221,7 +275,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     }
     setSavingProd(true);
     try {
-      await dbService.saveProduct({
+      const saved = await dbService.saveProduct({
         id: editProd.id,
         title: editProd.title!,
         category: editProd.category || 'Kain Tenun',
@@ -232,13 +286,15 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
         status: editProd.status || 'aktif',
         isFeatured: editProd.isFeatured || false,
         code: editProd.code || 'TIS-NEW',
-        dimensions: editProd.dimensions || '',
         weaver: editProd.weaver || 'Penenun Sumba',
-        makingTime: editProd.makingTime || '3 Bulan',
         stock: editProd.stock !== undefined ? Number(editProd.stock) : 5,
+        id_kategori: editProd.id_kategori || null,
+        id_penenun: editProd.id_penenun || null,
       });
+      await dbService.syncProductSizes(Number(saved.id), editSizes);
       setIsFormOpen(false);
       setEditProd(null);
+      setEditSizes([]);
       await loadData();
     } catch { 
       setFormErr('Terjadi kesalahan saat menyimpan data ke database.'); 
@@ -259,13 +315,129 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
   };
 
   const handleUpdateStock = async (p: Product, newStock: number) => {
+    const oldStock = p.stock ?? 5;
     const updatedStock = Math.max(0, newStock);
     await dbService.saveProduct({ ...p, stock: updatedStock });
     setProducts(prev => prev.map(x => x.id === p.id ? { ...x, stock: updatedStock } : x));
+    // Log the stok change
+    const masuk = updatedStock > oldStock ? updatedStock - oldStock : 0;
+    const keluar = updatedStock < oldStock ? oldStock - updatedStock : 0;
+    if (masuk > 0 || keluar > 0) {
+      await dbService.addStokLog({
+        id_produk: Number(p.id),
+        jumlah_masuk: masuk,
+        jumlah_keluar: keluar,
+        keterangan: 'Update manual oleh admin'
+      });
+    }
+  };
+
+  // Kategori handlers
+  const handleSaveKategori = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setKatErr('');
+    if (!editKategori?.nama_kategori) { setKatErr('Nama kategori wajib diisi'); return; }
+    setSavingKat(true);
+    try {
+      await dbService.saveKategori({ ...editKategori as Omit<Kategori, 'id_kategori'>, id_kategori: editKategori.id_kategori });
+      setIsKatFormOpen(false); setEditKategori(null);
+      const updated = await dbService.getAllKategori();
+      setKategoriList(updated);
+    } catch { setKatErr('Gagal menyimpan kategori.'); }
+    finally { setSavingKat(false); }
+  };
+
+  const handleDeleteKategori = (id: number) => {
+    openConfirm('Hapus Kategori', 'Yakin hapus kategori ini?', async () => {
+      await dbService.deleteKategori(id);
+      setKategoriList(prev => prev.filter(k => k.id_kategori !== id));
+    });
+  };
+
+  // Penenun handlers
+  const handleSavePenenun = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPenErr('');
+    if (!editPenenun?.nama) { setPenErr('Nama penenun wajib diisi'); return; }
+    setSavingPen(true);
+    try {
+      await dbService.savePenenun({ ...editPenenun as Omit<Penenun, 'id_penenun'>, id_penenun: editPenenun.id_penenun });
+      setIsPenFormOpen(false); setEditPenenun(null);
+      const updated = await dbService.getAllPenenun();
+      setPenenunList(updated);
+    } catch { setPenErr('Gagal menyimpan penenun.'); }
+    finally { setSavingPen(false); }
+  };
+
+  const handleDeletePenenun = (id: number) => {
+    openConfirm('Hapus Penenun', 'Yakin hapus data penenun ini?', async () => {
+      await dbService.deletePenenun(id);
+      setPenenunList(prev => prev.filter(p => p.id_penenun !== id));
+    });
+  };
+
+  // Kelompok handlers
+  const handleSaveKelompok = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setKelErr('');
+    if (!editKelompok?.nama_kelompok) { setKelErr('Nama kelompok wajib diisi'); return; }
+    setSavingKel(true);
+    try {
+      await dbService.saveKelompokPenenun({ ...editKelompok as Omit<KelompokPenenun, 'id_kelompok'>, id_kelompok: editKelompok.id_kelompok });
+      setIsKelFormOpen(false); setEditKelompok(null);
+      const updated = await dbService.getAllKelompokPenenun();
+      setKelompokList(updated);
+    } catch { setKelErr('Gagal menyimpan kelompok.'); }
+    finally { setSavingKel(false); }
+  };
+
+  const handleDeleteKelompok = (id: number) => {
+    openConfirm('Hapus Kelompok Penenun', 'Yakin hapus kelompok penenun ini?', async () => {
+      await dbService.deleteKelompokPenenun(id);
+      setKelompokList(prev => prev.filter(k => k.id_kelompok !== id));
+    });
+  };
+
+  // Promo handlers
+  const handleSavePromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPromoErr('');
+    if (!editPromo?.kode_promo || !editPromo?.diskon) { setPromoErr('Kode dan diskon wajib diisi'); return; }
+    setSavingPromo(true);
+    try {
+      await dbService.savePromo({ ...editPromo as Omit<Promo, 'id_promo'>, id_promo: editPromo.id_promo });
+      setIsPromoFormOpen(false); setEditPromo(null);
+      const updated = await dbService.getAllPromo();
+      setPromoList(updated);
+    } catch { setPromoErr('Gagal menyimpan promo.'); }
+    finally { setSavingPromo(false); }
+  };
+
+  const handleDeletePromo = (id: number) => {
+    openConfirm('Hapus Promo', 'Yakin hapus kode promo ini?', async () => {
+      await dbService.deletePromo(id);
+      setPromoList(prev => prev.filter(p => p.id_promo !== id));
+    });
   };
 
   const handleUpdateOrderStatus = async (id: string, status: Order['status']) => {
     await dbService.updateOrderStatus(id, status);
+    
+    // Auto-notifikasi saat status berubah
+    if (status === 'dikirim' || status === 'selesai') {
+      const order = orders.find(o => o.id === id);
+      if (order) {
+        const userMatch = usersList.find(u => u.nama_lengkap.toLowerCase() === order.customerName.toLowerCase());
+        if (userMatch) {
+          await dbService.createNotifikasi(
+            userMatch.id_user,
+            `Pesanan Anda #${order.id} telah diupdate menjadi: ${STATUS_PESANAN[status].label}.`,
+            status === 'selesai' ? 'success' : 'info'
+          );
+        }
+      }
+    }
+    
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
   };
 
@@ -280,20 +452,54 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     );
   };
 
-  const handleUpdateMsgStatus = async (id: string, status: 'baru' | 'dibaca' | 'selesai') => {
-    await dbService.updateInquiryStatus(id, status);
-    setInquiries(prev => prev.map(m => m.id === id ? { ...m, status } : m));
+  // Size handlers
+  const handleSaveSize = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSizeErr('');
+    if (!editSize?.id_produk || !editSize?.ukuran) {
+      setSizeErr('Produk dan ukuran wajib diisi');
+      return;
+    }
+    setSavingSize(true);
+    try {
+      await dbService.saveSize({ ...editSize as CustomSize });
+      setIsSizeFormOpen(false);
+      setEditSize(null);
+      await loadData();
+    } catch {
+      setSizeErr('Gagal menyimpan ukuran');
+    } finally {
+      setSavingSize(false);
+    }
   };
 
-  const handleDeleteMsg = (id: string) => {
+  const handleDeleteSize = (id: number) => {
     openConfirm(
-      'Hapus Pesan Masuk',
-      'Apakah Anda yakin ingin menghapus pesan konsultasi masuk ini?',
+      'Hapus Ukuran',
+      'Yakin ingin menghapus ukuran ini?',
       async () => {
-        await dbService.deleteInquiry(id);
-        setInquiries(prev => prev.filter(m => m.id !== id));
+        await dbService.deleteSize(id);
+        await loadData();
       }
     );
+  };
+
+  // Notification handlers
+  const handleSendNotif = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notifTargetUserId || !notifPesan) return;
+    setSendingNotif(true);
+    try {
+      await dbService.createNotifikasi(notifTargetUserId, notifPesan, notifTipe);
+      setIsNotifFormOpen(false);
+      setNotifPesan('');
+      setNotifTargetUserId(null);
+      alert('Notifikasi berhasil dikirim');
+    } catch {
+      alert('Gagal mengirim notifikasi');
+    } finally {
+      setSendingNotif(false);
+    }
   };
 
   const handleSaveArt = async (e: React.FormEvent) => {
@@ -340,16 +546,14 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     const totalValuation = products.reduce((s, p) => s + p.price * (p.stock ?? 5), 0);
     const completedRevenue = orders.filter(o => o.status === 'selesai').reduce((s, o) => s + o.totalPrice, 0);
     const activeOrders = orders.filter(o => ['menunggu', 'dikirim'].includes(o.status)).length;
-    const newMessages = inquiries.filter(m => m.status === 'baru').length;
     const lowStockProducts = products.filter(p => (p.stock ?? 5) <= 2);
     
-    return { totalValuation, completedRevenue, activeOrders, newMessages, lowStockProducts };
-  }, [products, orders, inquiries]);
+    return { totalValuation, completedRevenue, activeOrders, lowStockProducts, totalProducts: products.length };
+  }, [products, orders]);
 
 
 
   const filteredOrders = useMemo(() => orderFilter === 'all' ? orders : orders.filter(o => o.status === orderFilter), [orders, orderFilter]);
-  const filteredMessages = useMemo(() => msgFilter === 'all' ? inquiries : inquiries.filter(m => m.status === msgFilter), [inquiries, msgFilter]);
 
   // ── Render View Condition ──────────────────────────────────────────────────
   if (!isAdmin) {
@@ -397,70 +601,115 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
   }
 
   return (
-    <div id="admin-workspace" className="min-h-screen bg-white pt-10 pb-24 md:pb-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* Top Header Control (Unified Dashboard Toolbar Card) */}
-        <div className="bg-white border border-[#F1F5F9] rounded-3xl p-4 sm:p-5 mb-8 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div id="admin-workspace" className="min-h-screen bg-[#F8FAFC] flex overflow-hidden">
+      
+      {/* Sidebar Overlay for Mobile */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-[90] lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar Navigation */}
+      <aside className={`fixed lg:static top-0 left-0 h-screen w-64 bg-white border-r border-[#F1F5F9] z-[100] transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} flex flex-col flex-shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)]`}>
+        <div className="p-6 border-b border-[#F1F5F9] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#7B1618]/5 rounded-2xl flex items-center justify-center border border-[#7B1618]/10 flex-shrink-0">
-              <img src="/favicon.png" alt="Logo Seraphine" className="w-6 h-6 object-contain" />
+              <img src="/favicon.png" alt="Logo" className="w-6 h-6 object-contain" />
             </div>
-            <div className="text-left">
-              <h1 className="font-serif text-base sm:text-lg font-extrabold text-stone-900 leading-tight">Panel Administrasi</h1>
-              <p className="text-[9px] font-mono uppercase tracking-widest text-[#7B1618] font-bold">Seraphine Weetebula</p>
+            <div>
+              <h1 className="font-serif text-sm font-extrabold text-stone-900 leading-tight">Panel Admin</h1>
+              <p className="text-[9px] font-mono uppercase tracking-widest text-maroon font-bold">Seraphine</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#F1F5F9]">
-            <button 
-              onClick={loadData} 
-              disabled={isLoading} 
-              className="p-2.5 bg-[#FFFFFF] border border-[#F1F5F9] rounded-xl text-[#64748B] hover:text-[#7B1618] transition-all cursor-pointer shadow-sm flex-shrink-0"
-              title="Perbarui Data"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
-            <button 
-              onClick={() => setCurrentTab && setCurrentTab('home')} 
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#7B1618] hover:bg-[#5A0E10] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-            >
-              <Eye className="w-3.5 h-3.5" /> Lihat Website
-            </button>
-            <button 
-              onClick={() => setIsAdmin(false)} 
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#FFFFFF] border border-[#F1F5F9] rounded-xl text-xs font-bold text-[#64748B] hover:text-red-700 transition-all cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" /> Keluar Sesi
-            </button>
+          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-gray-400 hover:text-gray-700 bg-gray-50 p-1.5 rounded-lg">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1 custom-scrollbar">
+          <SidebarBtn active={adminTab==='overview'}   onClick={()=>{setAdminTab('overview');setIsSidebarOpen(false);}}   icon={<BarChart3 />}     label="Ringkasan" />
+          <SidebarBtn active={adminTab==='products'}   onClick={()=>{setAdminTab('products');setIsSidebarOpen(false);}}   icon={<Package />}       label="Katalog Tenun" badge={products.length} />
+          <SidebarBtn active={adminTab==='stock'}      onClick={()=>{setAdminTab('stock');setIsSidebarOpen(false);}}      icon={<Layers />}        label="Manajemen Stok" />
+          <SidebarBtn active={adminTab==='orders'}     onClick={()=>{setAdminTab('orders');setIsSidebarOpen(false);}}     icon={<ShoppingCart />}  label="Pesanan" badge={metrics.activeOrders} />
+          <SidebarBtn active={adminTab==='articles'}   onClick={()=>{setAdminTab('articles');setIsSidebarOpen(false);}}   icon={<BookOpen />}      label="Edukasi" badge={articles.length} />
+          <SidebarBtn active={adminTab==='kategori'}   onClick={()=>{setAdminTab('kategori');setIsSidebarOpen(false);}}   icon={<Tag />}           label="Kategori" badge={kategoriList.length} />
+          <SidebarBtn active={adminTab==='penenun'}    onClick={()=>{setAdminTab('penenun');setIsSidebarOpen(false);}}    icon={<Award />}         label="Penenun" badge={penenunList.length} />
+          <SidebarBtn active={adminTab==='promo'}      onClick={()=>{setAdminTab('promo');setIsSidebarOpen(false);}}      icon={<Percent />}       label="Promo" badge={promoList.length} />
+          <SidebarBtn active={adminTab==='sizes'}      onClick={()=>{setAdminTab('sizes');setIsSidebarOpen(false);}}      icon={<Ruler />}         label="Ukuran Produk" badge={sizesList.length} />
+          <SidebarBtn active={adminTab==='pembayaran'} onClick={()=>{setAdminTab('pembayaran');setIsSidebarOpen(false);}} icon={<CreditCard />}    label="Pembayaran" badge={pembayaranList.filter(p=>p.status==='menunggu').length} />
+          <SidebarBtn active={adminTab==='pengiriman'} onClick={()=>{setAdminTab('pengiriman');setIsSidebarOpen(false);}} icon={<Truck />}         label="Pengiriman" badge={pengirimanList.filter(p=>p.status_pengiriman==='menunggu').length} />
+          <SidebarBtn active={adminTab==='notifications'} onClick={()=>{setAdminTab('notifications');setIsSidebarOpen(false);}} icon={<AlertCircle />} label="Kirim Notifikasi" />
+        </div>
+
+        <div className="p-4 border-t border-[#F1F5F9]">
+          <button onClick={() => setCurrentTab && setCurrentTab('home')} className="flex items-center gap-3 w-full px-4 py-2.5 text-stone-600 hover:bg-stone-50 rounded-xl transition-colors font-bold text-xs uppercase tracking-wider mb-2">
+            <Eye className="w-4 h-4" /> Lihat Website
+          </button>
+          <button onClick={() => setIsAdmin(false)} className="flex items-center gap-3 w-full px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-bold text-xs uppercase tracking-wider">
+            <LogOut className="w-4 h-4" /> Keluar Sesi
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto bg-[#F8FAFC] custom-scrollbar">
+        
+        {/* Mobile Header */}
+        <div className="lg:hidden sticky top-0 z-[80] bg-white border-b border-[#F1F5F9] p-4 flex items-center justify-between shadow-sm">
+          <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 text-stone-600 bg-stone-50 rounded-xl">
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="font-serif font-bold text-stone-900 flex items-center gap-2">
+            <img src="/favicon.png" alt="Logo" className="w-5 h-5 object-contain" />
+            Panel Admin
           </div>
+          <button onClick={loadData} disabled={isLoading} className="p-2 -mr-2 text-maroon bg-maroon/5 rounded-xl">
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
 
-        {/* Tab Selection Navigation (Desktop Only) */}
-        <div className="hidden md:flex overflow-x-auto no-scrollbar gap-1.5 bg-white border border-[#F1F5F9] p-2 rounded-2xl shadow-sm mb-8 scroll-smooth">
-          <TabBtn active={adminTab==='overview'}  onClick={()=>setAdminTab('overview')}  icon={<BarChart3 className="w-4 h-4"/>}     label="Ringkasan Performa" />
-          <TabBtn active={adminTab==='products'}  onClick={()=>setAdminTab('products')}  icon={<Package className="w-4 h-4"/>}       label="Katalog Tenun"  badge={products.length} />
-          <TabBtn active={adminTab==='stock'}     onClick={()=>setAdminTab('stock')}     icon={<Layers className="w-4 h-4"/>}        label="Manajemen Stok" />
-          <TabBtn active={adminTab==='orders'}    onClick={()=>setAdminTab('orders')}    icon={<ShoppingCart className="w-4 h-4"/>}  label="Manajemen Pesanan" badge={metrics.activeOrders} />
-          <TabBtn active={adminTab==='messages'}  onClick={()=>setAdminTab('messages')}  icon={<MessageSquare className="w-4 h-4"/>} label="Konsultasi Masuk" badge={metrics.newMessages} />
-          <TabBtn active={adminTab==='articles'}  onClick={()=>setAdminTab('articles')}  icon={<BookOpen className="w-4 h-4"/>}      label="Konten Edukasi" badge={articles.length} />
-        </div>
-
-        {/* ── Tab Layout Render Content (Bento Grid) ───────────────────────── */}
+        <div className="flex-1 p-4 md:p-8 w-full max-w-7xl mx-auto pb-24 lg:pb-8">
+          
+          {/* Top Actions (Desktop) */}
+          <div className="hidden lg:flex items-center justify-between mb-8 bg-white p-5 rounded-2xl border border-[#F1F5F9] shadow-sm">
+            <div>
+              <h2 className="text-xl font-serif font-bold text-stone-900">
+                {adminTab === 'overview' ? 'Ringkasan Dashboard' : 
+                 adminTab === 'products' ? 'Katalog Tenun' : 
+                 adminTab === 'stock' ? 'Manajemen Stok' :
+                 adminTab === 'orders' ? 'Pesanan Pelanggan' :
+                 adminTab === 'articles' ? 'Edukasi & Jurnal' :
+                 adminTab === 'kategori' ? 'Manajemen Kategori' :
+                 adminTab === 'penenun' ? 'Data Penenun' :
+                 adminTab === 'promo' ? 'Kode Promo' :
+                 adminTab === 'sizes' ? 'Ukuran Produk' :
+                 adminTab === 'pembayaran' ? 'Pembayaran' :
+                 adminTab === 'pengiriman' ? 'Pengiriman' : 'Kirim Notifikasi'}
+              </h2>
+              <p className="text-xs text-gray-400 mt-1">Kelola data dan pantau aktivitas sistem Seraphine.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={loadData} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#F1F5F9] hover:bg-stone-50 text-stone-600 text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer">
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> Perbarui Data
+              </button>
+            </div>
+          </div>
+          
+          {/* ── Tab Layout Render Content (Bento Grid) ───────────────────────── */}
         {adminTab === 'overview' && (
           <div className="space-y-6 animate-fade-in">
             
             {/* TIER 1: METRIK BENTO (Highlight Data Finansial) */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6">
-              <div className="md:col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+              <div>
                 <StatCard 
                   accent 
-                  label="Total Valuasi Stok" 
+                  label="Valuasi Stok" 
                   value={formatPrice(metrics.totalValuation)} 
-                  sub="Total kapitalisasi aset katalog saat ini" 
+                  sub="Kapitalisasi aset katalog" 
                   icon={<span className="font-mono font-bold text-sm select-none">Rp</span>}
                 />
               </div>
-              <div className="md:col-span-1">
+              <div>
                 <StatCard 
                   label="Pendapatan Sukses" 
                   value={formatPrice(metrics.completedRevenue)} 
@@ -468,12 +717,20 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                   icon={<TrendingUp className="w-5 h-5"/>} 
                 />
               </div>
-              <div className="md:col-span-1">
+              <div>
                 <StatCard 
                   label="Pesanan Aktif" 
                   value={metrics.activeOrders} 
                   sub={`${orders.length} total pesanan`} 
                   icon={<ShoppingCart className="w-5 h-5"/>} 
+                />
+              </div>
+              <div>
+                <StatCard 
+                  label="Total Karya" 
+                  value={metrics.totalProducts} 
+                  sub="Koleksi katalog aktif" 
+                  icon={<Package className="w-5 h-5"/>} 
                 />
               </div>
             </div>
@@ -582,7 +839,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
           <div className="space-y-5 animate-fade-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
               <p className="text-sm text-stone-700 font-medium">Registrasi Entri Katalog: <span className="font-bold text-maroon">{products.length} produk</span></p>
-              <button onClick={() => { setEditProd({ title:'', category:'Kain Tenun', price: undefined, image:'', description:'', isFeatured:false, code:'TIS-NEW'+Math.floor(Math.random()*900+100), dimensions:'200 x 100 cm', weaver:'Mama Penenun', makingTime:'3 Bulan', stock: 1 }); setFormErr(''); setIsFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <button onClick={() => { setEditSizes([]); setEditProd({ title:'', category:'Kain Tenun', price: undefined, image:'', description:'', isFeatured:false, code:'TIS-NEW'+Math.floor(Math.random()*900+100), weaver:'Mama Penenun', stock: 1 }); setFormErr(''); setIsFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
                 <Plus className="w-4 h-4" /> Tambah Entri Kain
               </button>
             </div>
@@ -614,7 +871,6 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                         </td>
                         <td className="p-4">
                           <p className="font-serif font-bold text-stone-900 text-sm leading-tight">{p.title}</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">{p.dimensions || '—'} • {p.makingTime}</p>
                           {p.isFeatured && <span className="inline-flex items-center gap-0.5 text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded mt-1"><Star className="w-2.5 h-2.5"/>Featured</span>}
                         </td>
                         <td className="p-4"><span className="px-2 py-0.5 text-[10px] font-mono font-bold text-maroon bg-rose-50 border border-rose-200 rounded">{p.category}</span></td>
@@ -626,7 +882,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                         <td className="p-4 text-stone-700 text-xs truncate max-w-[110px]">{p.weaver}</td>
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => { setEditProd({...p}); setFormErr(''); setIsFormOpen(true); }} className="p-1.5 bg-gray-100 text-gray-600 hover:text-stone-900 rounded-lg"><Edit className="w-3.5 h-3.5"/></button>
+                            <button onClick={() => { setEditSizes(sizesList.filter(s => s.id_produk === Number(p.id)).map(s => s.ukuran)); setEditProd({...p}); setFormErr(''); setIsFormOpen(true); }} className="p-1.5 bg-gray-100 text-gray-600 hover:text-stone-900 rounded-lg"><Edit className="w-3.5 h-3.5"/></button>
                             <button onClick={() => handleDeleteProd(p.id)} className="p-1.5 bg-gray-100 text-gray-600 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
                           </div>
                         </td>
@@ -742,49 +998,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
           </div>
         )}
 
-        {/* Tab Konten Konsultasi Masuk */}
-        {adminTab === 'messages' && (
-          <div className="space-y-5 animate-fade-in">
-            <div className="grid grid-cols-1 gap-4">
-              {filteredMessages.length === 0 ? (
-                <div className="bg-white border border-[#F1F5F9] rounded-3xl p-12 text-center shadow-sm flex flex-col items-center justify-center">
-                  <div className="w-12 h-12 bg-[#7B1618]/5 text-maroon rounded-full flex items-center justify-center mb-3.5">
-                    <Mail className="w-5 h-5" />
-                  </div>
-                  <p className="text-sm font-bold text-stone-900 mb-1">Belum Ada Pesan Masuk</p>
-                  <p className="text-xs text-gray-400 max-w-xs leading-relaxed">Semua konsultasi, pertanyaan, atau pesan kustom dari halaman kontak akan otomatis terhimpun di sini.</p>
-                </div>
-              ) : filteredMessages.map(m => {
-                const messageStatus = STATUS_PESAN[m.status] || STATUS_PESAN.baru;
-                return (
-                  <div key={m.id} className={`bg-white rounded-2xl border shadow-sm p-5 space-y-3 ${m.status === 'baru' ? 'border-rose-200 bg-rose-50/20' : 'border-[#F1F5F9]'}`}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center flex-shrink-0">
-                          <Mail className="w-4.5 h-4.5 text-maroon" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-sm text-stone-900">{m.name}</p>
-                          <p className="text-xs text-gray-400 font-mono">{m.email}</p>
-                        </div>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${messageStatus.cls}`}>{messageStatus.label}</span>
-                    </div>
-                    <p className="text-sm text-stone-700 bg-white/40 rounded-xl p-3 italic">"{m.message}"</p>
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="flex items-center gap-2">
-                        {['baru','dibaca','selesai'].map(st => (
-                          <button key={st} onClick={() => handleUpdateMsgStatus(m.id, st as any)} className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border ${m.status === st ? 'bg-stone-200 border-stone-400' : 'bg-white text-gray-500'}`}>{st}</button>
-                        ))}
-                      </div>
-                      <button onClick={() => handleDeleteMsg(m.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+
 
         {/* Tab Konten Manajemen Artikel Edukasi */}
         {adminTab === 'articles' && (
@@ -820,10 +1034,6 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
           </div>
         )}
 
-
-
-      </div>
-
       {/* ── Modal Block: Formulir Produk ─────────────────────────────────── */}
       {isFormOpen && editProd && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsFormOpen(false); setEditProd(null); }}}>
@@ -846,6 +1056,34 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                 <div>
                   <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Kuantitas Alokasi Stok *</label>
                   <input type="number" required min={0} placeholder="Contoh: 5" value={editProd.stock??5} onChange={e=>setEditProd({...editProd,stock:Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl"/>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Kategori Tenun *</label>
+                  <select required value={editProd.category||''} onChange={e=>setEditProd({...editProd,category:e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl">
+                    <option value="">Pilih Kategori...</option>
+                    {kategoriList.map(k => (
+                      <option key={k.id_kategori} value={k.nama_kategori}>{k.nama_kategori}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Ukuran Produk (Pilih yang tersedia)</label>
+                  <div className="flex flex-wrap gap-3 p-3 bg-white border border-[#F1F5F9] rounded-xl">
+                    {['S', 'M', 'L', 'XL', 'All Size'].map(uk => (
+                      <label key={uk} className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={editSizes.includes(uk)}
+                          onChange={(e) => {
+                            if (e.target.checked) setEditSizes(prev => [...prev, uk]);
+                            else setEditSizes(prev => prev.filter(s => s !== uk));
+                          }}
+                          className="w-4 h-4 text-maroon rounded focus:ring-maroon cursor-pointer"
+                        />
+                        <span className="text-sm text-stone-700 font-medium">{uk}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Foto Produk *</label>
@@ -957,15 +1195,485 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
         </div>
       )}
 
-      {/* Sticky Bottom Navigation Bar (Mobile Only) */}
-      <div className="fixed bottom-0 inset-x-0 z-[140] bg-[#FFFFFF]/95 backdrop-blur-md border-t border-[#F1F5F9] flex md:hidden items-center justify-around py-2 px-1 shadow-[0_-4px_20px_rgba(61,26,10,0.08)]">
-        <BottomTabItem active={adminTab==='overview'}  onClick={()=>setAdminTab('overview')}  icon={<BarChart3 />}     label="Ringkasan" />
-        <BottomTabItem active={adminTab==='products'}  onClick={()=>setAdminTab('products')}  icon={<Package />}       label="Katalog"   badge={products.length} />
-        <BottomTabItem active={adminTab==='stock'}     onClick={()=>setAdminTab('stock')}     icon={<Layers />}        label="Stok" />
-        <BottomTabItem active={adminTab==='orders'}    onClick={()=>setAdminTab('orders')}    icon={<ShoppingCart />}  label="Pesanan"   badge={metrics.activeOrders} />
-        <BottomTabItem active={adminTab==='messages'}  onClick={()=>setAdminTab('messages')}  icon={<MessageSquare />} label="Chat"      badge={metrics.newMessages} />
-        <BottomTabItem active={adminTab==='articles'}  onClick={()=>setAdminTab('articles')}  icon={<BookOpen />}      label="Edukasi"   badge={articles.length} />
-      </div>
+
+      {/* ─────── TAB: KATEGORI ─────── */}
+      {adminTab === 'kategori' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Manajemen Kategori Produk: <span className="font-bold text-maroon">{kategoriList.length} kategori</span></p>
+            <button onClick={() => { setEditKategori({}); setIsKatFormOpen(true); setKatErr(''); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <Plus className="w-4 h-4" /> Tambah Kategori
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {kategoriList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><Tag className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada kategori</p></div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                    <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                      <th className="p-4 w-24">ID</th>
+                      <th className="p-4">Nama Kategori</th>
+                      <th className="p-4">Deskripsi</th>
+                      <th className="p-4 w-24 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                <tbody className="divide-y divide-[#F1F5F9]">
+                  {kategoriList.map(k => (
+                    <tr key={k.id_kategori} className="hover:bg-[#F8FAFC]/50 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-gray-400">#{k.id_kategori}</td>
+                      <td className="px-4 py-3 font-semibold text-stone-800">{k.nama_kategori}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{k.deskripsi || '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex gap-1.5 justify-end">
+                          <button onClick={() => { setEditKategori(k); setIsKatFormOpen(true); setKatErr(''); }} className="p-1.5 hover:bg-amber-50 rounded-lg cursor-pointer"><Edit className="w-3.5 h-3.5 text-amber-600" /></button>
+                          <button onClick={() => handleDeleteKategori(k.id_kategori)} className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-red-500" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: PENENUN ─────── */}
+      {adminTab === 'penenun' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Penenun Section */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Data Penenun: <span className="font-bold text-maroon">{penenunList.length} penenun</span></p>
+            <button onClick={() => { setEditPenenun({}); setIsPenFormOpen(true); setPenErr(''); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <Plus className="w-4 h-4" /> Tambah Penenun
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {penenunList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><Award className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada data penenun</p></div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead>
+                    <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                      <th className="p-4 w-20">Foto</th>
+                      <th className="p-4">Nama</th>
+                      <th className="p-4">Kelompok</th>
+                      <th className="p-4">Lokasi Desa</th>
+                      <th className="p-4 w-24 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                <tbody className="divide-y divide-[#F1F5F9]">
+                  {penenunList.map(p => (
+                    <tr key={p.id_penenun} className="hover:bg-[#F8FAFC]/50 transition-colors">
+                      <td className="px-4 py-3"><div className="w-10 h-10 rounded-xl overflow-hidden bg-stone-100">{p.foto ? <img src={p.foto} alt={p.nama} className="w-full h-full object-cover" /> : <Award className="w-5 h-5 m-auto mt-2.5 text-stone-300" />}</div></td>
+                      <td className="px-4 py-3 font-semibold text-stone-800">{p.nama}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{p.nama_kelompok || '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{p.lokasi_desa || '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex gap-1.5 justify-end">
+                          <button onClick={() => { setEditPenenun(p); setIsPenFormOpen(true); setPenErr(''); }} className="p-1.5 hover:bg-amber-50 rounded-lg cursor-pointer"><Edit className="w-3.5 h-3.5 text-amber-600" /></button>
+                          <button onClick={() => handleDeletePenenun(p.id_penenun)} className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-red-500" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          {/* Kelompok Penenun Section */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm mt-8">
+            <p className="text-sm text-stone-700 font-medium">Kelompok Penenun: <span className="font-bold text-stone-900">{kelompokList.length} kelompok</span></p>
+            <button onClick={() => { setEditKelompok({}); setIsKelFormOpen(true); setKelErr(''); }} className="px-4 py-2 bg-stone-700 hover:bg-stone-800 text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <Plus className="w-4 h-4" /> Tambah Kelompok
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {kelompokList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada kelompok penenun</p></div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                    <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                      <th className="p-4">Nama Kelompok</th>
+                      <th className="p-4">Lokasi Desa</th>
+                      <th className="p-4">Deskripsi</th>
+                      <th className="p-4 w-24 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                <tbody className="divide-y divide-[#F1F5F9]">
+                  {kelompokList.map(k => (
+                    <tr key={k.id_kelompok} className="hover:bg-[#F8FAFC]/50">
+                      <td className="px-4 py-3 font-semibold text-stone-800">{k.nama_kelompok}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{k.lokasi_desa || '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{k.deskripsi || '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex gap-1.5 justify-end">
+                          <button onClick={() => { setEditKelompok(k); setIsKelFormOpen(true); setKelErr(''); }} className="p-1.5 hover:bg-amber-50 rounded-lg cursor-pointer"><Edit className="w-3.5 h-3.5 text-amber-600" /></button>
+                          <button onClick={() => handleDeleteKelompok(k.id_kelompok)} className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-red-500" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: PROMO ─────── */}
+      {adminTab === 'promo' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Manajemen Kode Promo: <span className="font-bold text-maroon">{promoList.length} promo</span></p>
+            <button onClick={() => { setEditPromo({}); setIsPromoFormOpen(true); setPromoErr(''); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <Plus className="w-4 h-4" /> Tambah Promo
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {promoList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><Percent className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada kode promo</p></div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead>
+                    <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                      <th className="p-4 w-32">Kode Promo</th>
+                      <th className="p-4 w-24">Diskon</th>
+                      <th className="p-4 w-32">Berlaku Hingga</th>
+                      <th className="p-4">Keterangan</th>
+                      <th className="p-4 w-24 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                <tbody className="divide-y divide-[#F1F5F9]">
+                  {promoList.map(p => {
+                    const isExpired = p.berlaku_hingga ? new Date(p.berlaku_hingga) < new Date() : false;
+                    return (
+                      <tr key={p.id_promo} className={`hover:bg-[#F8FAFC]/50 transition-colors ${isExpired ? 'opacity-50' : ''}`}>
+                        <td className="px-4 py-3"><span className="font-mono font-bold text-maroon bg-red-50 px-2 py-1 rounded-lg text-xs">{p.kode_promo}</span></td>
+                        <td className="px-4 py-3 font-bold text-emerald-700">{p.diskon}%</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{p.berlaku_hingga ? new Date(p.berlaku_hingga).toLocaleDateString('id-ID') : '—'} {isExpired && <span className="ml-1 text-red-500 font-bold">(Kadaluarsa)</span>}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{p.keterangan || '—'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex gap-1.5 justify-end">
+                            <button onClick={() => { setEditPromo(p); setIsPromoFormOpen(true); setPromoErr(''); }} className="p-1.5 hover:bg-amber-50 rounded-lg cursor-pointer"><Edit className="w-3.5 h-3.5 text-amber-600" /></button>
+                            <button onClick={() => handleDeletePromo(p.id_promo)} className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-red-500" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: PEMBAYARAN ─────── */}
+      {adminTab === 'pembayaran' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Manajemen Pembayaran: <span className="font-bold text-maroon">{pembayaranList.length} transaksi</span></p>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {pembayaranList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><CreditCard className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada data pembayaran</p></div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead>
+                    <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                      <th className="p-4 w-24">ID Bayar</th>
+                      <th className="p-4 w-24">ID Pesanan</th>
+                      <th className="p-4">Metode</th>
+                      <th className="p-4 w-32">Jumlah</th>
+                      <th className="p-4 w-28">Status</th>
+                      <th className="p-4 w-32 text-right">Ubah Status</th>
+                    </tr>
+                  </thead>
+                <tbody className="divide-y divide-[#F1F5F9]">
+                  {pembayaranList.map(b => {
+                    const statusCls = { menunggu: 'bg-amber-100 text-amber-800', berhasil: 'bg-emerald-100 text-emerald-800', gagal: 'bg-red-100 text-red-800' };
+                    return (
+                      <tr key={b.id_pembayaran} className="hover:bg-[#F8FAFC]/50">
+                        <td className="px-4 py-3 font-mono text-xs text-gray-400">#{b.id_pembayaran}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-maroon">#{b.id_pesanan}</td>
+                        <td className="px-4 py-3 text-xs text-gray-600">{b.metode || '—'}</td>
+                        <td className="px-4 py-3 text-xs font-semibold">{b.jumlah ? new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(b.jumlah) : '—'}</td>
+                        <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusCls[b.status]}`}>{b.status}</span></td>
+                        <td className="px-4 py-3 text-right">
+                          <select value={b.status} onChange={async e => { await dbService.updatePembayaranStatus(b.id_pembayaran, e.target.value as any); const updated = await dbService.getAllPembayaran(); setPembayaranList(updated); }} className="text-xs border border-[#F1F5F9] rounded-lg px-2 py-1 cursor-pointer">
+                            <option value="menunggu">menunggu</option>
+                            <option value="berhasil">berhasil</option>
+                            <option value="gagal">gagal</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: PENGIRIMAN ─────── */}
+      {adminTab === 'pengiriman' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Manajemen Pengiriman: <span className="font-bold text-maroon">{pengirimanList.length} pengiriman</span></p>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {pengirimanList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><Truck className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada data pengiriman</p></div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead>
+                    <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                      <th className="p-4 w-24">ID Kirim</th>
+                      <th className="p-4 w-24">ID Pesanan</th>
+                      <th className="p-4 w-32">Ekspedisi</th>
+                      <th className="p-4">No. Resi</th>
+                      <th className="p-4 w-28">Status</th>
+                      <th className="p-4 w-64 text-right">Update Resi</th>
+                    </tr>
+                  </thead>
+                <tbody className="divide-y divide-[#F1F5F9]">
+                  {pengirimanList.map(k => {
+                    const statusCls: Record<string,string> = { menunggu:'bg-amber-100 text-amber-800', diproses:'bg-blue-100 text-blue-800', dikirim:'bg-indigo-100 text-indigo-800', tiba:'bg-emerald-100 text-emerald-800' };
+                    return (
+                      <tr key={k.id_pengiriman} className="hover:bg-[#F8FAFC]/50">
+                        <td className="px-4 py-3 font-mono text-xs text-gray-400">#{k.id_pengiriman}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-maroon">#{k.id_pesanan}</td>
+                        <td className="px-4 py-3 text-xs text-gray-600">{k.ekspedisi || '—'}</td>
+                        <td className="px-4 py-3 font-mono text-xs font-bold text-stone-800">{k.nomor_resi || '—'}</td>
+                        <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusCls[k.status_pengiriman] || 'bg-gray-100 text-gray-500'}`}>{k.status_pengiriman}</span></td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex gap-1 justify-end">
+                            <input type="text" placeholder="Ekspedisi..." defaultValue={k.ekspedisi||''} id={`ekspedisi-${k.id_pengiriman}`} className="w-20 text-xs border border-[#F1F5F9] rounded-lg px-2 py-1" />
+                            <input type="text" placeholder="No. Resi..." defaultValue={k.nomor_resi||''} id={`resi-${k.id_pengiriman}`} className="w-24 text-xs border border-[#F1F5F9] rounded-lg px-2 py-1" />
+                            <select defaultValue={k.status_pengiriman} id={`status-${k.id_pengiriman}`} className="text-xs border border-[#F1F5F9] rounded-lg px-1.5 py-1">
+                              <option value="menunggu">menunggu</option>
+                              <option value="diproses">diproses</option>
+                              <option value="dikirim">dikirim</option>
+                              <option value="tiba">tiba</option>
+                            </select>
+                            <button onClick={async () => {
+                              const eksp = (document.getElementById(`ekspedisi-${k.id_pengiriman}`) as HTMLInputElement)?.value;
+                              const resi = (document.getElementById(`resi-${k.id_pengiriman}`) as HTMLInputElement)?.value;
+                              const stat = (document.getElementById(`status-${k.id_pengiriman}`) as HTMLSelectElement)?.value;
+                              await dbService.updatePengiriman(k.id_pengiriman, { ekspedisi: eksp, nomor_resi: resi, status_pengiriman: stat as any });
+                              const updated = await dbService.getAllPengiriman();
+                              setPengirimanList(updated);
+                            }} className="px-2 py-1 bg-maroon text-white text-xs font-bold rounded-lg cursor-pointer">Simpan</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: SIZES ─────── */}
+      {adminTab === 'sizes' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Ukuran Produk: <span className="font-bold text-maroon">{sizesList.length} varian</span></p>
+            <button onClick={() => { setEditSize({ id_produk: 0, ukuran: '' }); setIsSizeFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <Plus className="w-4 h-4" /> Tambah Ukuran
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {sizesList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><Ruler className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada data ukuran custom</p></div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                    <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                      <th className="p-4 w-24">ID Produk</th>
+                      <th className="p-4">Produk</th>
+                      <th className="p-4 w-32">Ukuran</th>
+                      <th className="p-4 w-24 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                <tbody className="divide-y divide-[#F1F5F9]">
+                  {sizesList.map(s => {
+                    const prod = products.find(p => Number(p.id) === s.id_produk);
+                    return (
+                      <tr key={s.id_size} className="hover:bg-[#F8FAFC]/50">
+                        <td className="px-4 py-3 font-mono text-xs text-gray-400">#{s.id_produk}</td>
+                        <td className="px-4 py-3 font-bold text-[#1A1A1A]">{prod?.title || 'Produk Tidak Ditemukan'}</td>
+                        <td className="px-4 py-3"><span className="px-2 py-1 bg-[#F1F5F9] rounded-lg text-xs font-mono font-bold">{s.ukuran}</span></td>
+                        <td className="px-4 py-3 text-right">
+                          <button onClick={() => handleDeleteSize(s.id_size)} className="p-1.5 text-gray-400 hover:text-red-600 transition-colors bg-white rounded-xl shadow-sm border border-[#F1F5F9]"><Trash2 className="w-4 h-4" /></button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: NOTIFICATIONS ─────── */}
+      {adminTab === 'notifications' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Kirim Notifikasi Peringatan / Pengumuman</p>
+            <button onClick={() => setIsNotifFormOpen(true)} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <Plus className="w-4 h-4" /> Buat Notifikasi
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm p-6 text-center text-gray-500">
+            <AlertCircle className="w-10 h-10 mx-auto mb-3 opacity-20" />
+            <p className="text-sm">Fitur Riwayat Notifikasi belum tersedia di panel ini. Anda dapat membuat dan mengirim notifikasi baru kepada pengguna.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ─────── MODALS: Kategori ─────── */}
+      {isKatFormOpen && editKategori && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsKatFormOpen(false); setEditKategori(null); }}}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]"><h3 className="font-serif text-lg font-bold">{editKategori.id_kategori ? 'Edit Kategori' : 'Tambah Kategori'}</h3><button onClick={() => { setIsKatFormOpen(false); setEditKategori(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleSaveKategori} className="p-6 space-y-4">
+              {katErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl flex items-center gap-2"><AlertCircle className="w-4 h-4" />{katErr}</div>}
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Nama Kategori *</label><input type="text" required placeholder="Contoh: Kain Tenun Ikat" value={editKategori.nama_kategori||''} onChange={e => setEditKategori({...editKategori, nama_kategori: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Deskripsi</label><textarea rows={2} placeholder="Deskripsi singkat kategori..." value={editKategori.deskripsi||''} onChange={e => setEditKategori({...editKategori, deskripsi: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl resize-none" /></div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => { setIsKatFormOpen(false); setEditKategori(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={savingKat} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{savingKat ? 'Menyimpan...' : 'Simpan'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────── MODALS: Penenun ─────── */}
+      {isPenFormOpen && editPenenun && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsPenFormOpen(false); setEditPenenun(null); }}}>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]"><h3 className="font-serif text-lg font-bold">{editPenenun.id_penenun ? 'Edit Penenun' : 'Tambah Penenun'}</h3><button onClick={() => { setIsPenFormOpen(false); setEditPenenun(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleSavePenenun} className="p-6 space-y-4">
+              {penErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl flex items-center gap-2"><AlertCircle className="w-4 h-4" />{penErr}</div>}
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Nama Penenun *</label><input type="text" required placeholder="Contoh: Mama Seraphine" value={editPenenun.nama||''} onChange={e => setEditPenenun({...editPenenun, nama: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Nama Kelompok</label><input type="text" placeholder="Kelompok Wanno" value={editPenenun.nama_kelompok||''} onChange={e => setEditPenenun({...editPenenun, nama_kelompok: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+                <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Lokasi Desa</label><input type="text" placeholder="Desa Prailiu" value={editPenenun.lokasi_desa||''} onChange={e => setEditPenenun({...editPenenun, lokasi_desa: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              </div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">URL Foto</label><input type="text" placeholder="https://..." value={editPenenun.foto||''} onChange={e => setEditPenenun({...editPenenun, foto: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Bio / Deskripsi</label><textarea rows={3} placeholder="Cerita singkat tentang penenun..." value={editPenenun.bio||''} onChange={e => setEditPenenun({...editPenenun, bio: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl resize-none" /></div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => { setIsPenFormOpen(false); setEditPenenun(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={savingPen} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{savingPen ? 'Menyimpan...' : 'Simpan'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────── MODALS: Kelompok Penenun ─────── */}
+      {isKelFormOpen && editKelompok && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsKelFormOpen(false); setEditKelompok(null); }}}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]"><h3 className="font-serif text-lg font-bold">{editKelompok.id_kelompok ? 'Edit Kelompok' : 'Tambah Kelompok'}</h3><button onClick={() => { setIsKelFormOpen(false); setEditKelompok(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleSaveKelompok} className="p-6 space-y-4">
+              {kelErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl flex items-center gap-2"><AlertCircle className="w-4 h-4" />{kelErr}</div>}
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Nama Kelompok *</label><input type="text" required placeholder="Contoh: Kelompok Wanno" value={editKelompok.nama_kelompok||''} onChange={e => setEditKelompok({...editKelompok, nama_kelompok: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Lokasi Desa</label><input type="text" placeholder="Desa Prailiu, Kec. Kambera" value={editKelompok.lokasi_desa||''} onChange={e => setEditKelompok({...editKelompok, lokasi_desa: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Deskripsi</label><textarea rows={2} placeholder="Deskripsi singkat kelompok..." value={editKelompok.deskripsi||''} onChange={e => setEditKelompok({...editKelompok, deskripsi: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl resize-none" /></div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => { setIsKelFormOpen(false); setEditKelompok(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={savingKel} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{savingKel ? 'Menyimpan...' : 'Simpan'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────── MODALS: Promo ─────── */}
+      {isPromoFormOpen && editPromo && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsPromoFormOpen(false); setEditPromo(null); }}}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]"><h3 className="font-serif text-lg font-bold">{editPromo.id_promo ? 'Edit Promo' : 'Tambah Kode Promo'}</h3><button onClick={() => { setIsPromoFormOpen(false); setEditPromo(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleSavePromo} className="p-6 space-y-4">
+              {promoErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl flex items-center gap-2"><AlertCircle className="w-4 h-4" />{promoErr}</div>}
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Kode Promo *</label><input type="text" required placeholder="Contoh: SUMBA20" value={editPromo.kode_promo||''} onChange={e => setEditPromo({...editPromo, kode_promo: e.target.value.toUpperCase()})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl font-mono font-bold uppercase" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Diskon (%) *</label><input type="number" required min={1} max={100} placeholder="Contoh: 20" value={editPromo.diskon||''} onChange={e => setEditPromo({...editPromo, diskon: Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+                <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Berlaku Hingga</label><input type="date" value={editPromo.berlaku_hingga||''} onChange={e => setEditPromo({...editPromo, berlaku_hingga: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              </div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Keterangan</label><input type="text" placeholder="Contoh: Promo Hari Kemerdekaan" value={editPromo.keterangan||''} onChange={e => setEditPromo({...editPromo, keterangan: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => { setIsPromoFormOpen(false); setEditPromo(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={savingPromo} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{savingPromo ? 'Menyimpan...' : 'Simpan Promo'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────── MODALS: Sizes ─────── */}
+      {isSizeFormOpen && editSize && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsSizeFormOpen(false); setEditSize(null); }}}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]"><h3 className="font-serif text-lg font-bold">Tambah Ukuran</h3><button onClick={() => { setIsSizeFormOpen(false); setEditSize(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleSaveSize} className="p-6 space-y-4">
+              {sizeErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl flex items-center gap-2"><AlertCircle className="w-4 h-4" />{sizeErr}</div>}
+              <div>
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Produk *</label>
+                <select required value={editSize.id_produk||''} onChange={e => setEditSize({...editSize, id_produk: Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl">
+                  <option value="">Pilih Produk...</option>
+                  {products.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                </select>
+              </div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Ukuran *</label><input type="text" required placeholder="Contoh: S, M, L, XL" value={editSize.ukuran||''} onChange={e => setEditSize({...editSize, ukuran: e.target.value.toUpperCase()})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl font-mono" /></div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => { setIsSizeFormOpen(false); setEditSize(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={savingSize} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{savingSize ? 'Menyimpan...' : 'Simpan Ukuran'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────── MODALS: Notifications ─────── */}
+      {isNotifFormOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setIsNotifFormOpen(false); }}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]"><h3 className="font-serif text-lg font-bold">Kirim Notifikasi</h3><button onClick={() => setIsNotifFormOpen(false)} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleSendNotif} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Target Pengguna *</label>
+                <select required value={notifTargetUserId||''} onChange={e => setNotifTargetUserId(Number(e.target.value))} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl">
+                  <option value="">Pilih Pengguna...</option>
+                  {usersList.map(u => <option key={u.id_user} value={u.id_user}>{u.nama_lengkap} ({u.email})</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Tipe *</label>
+                <select required value={notifTipe} onChange={e => setNotifTipe(e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl">
+                  <option value="info">Informasi</option>
+                  <option value="success">Sukses</option>
+                  <option value="warning">Peringatan</option>
+                </select>
+              </div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Pesan *</label><textarea required rows={3} placeholder="Pesan notifikasi..." value={notifPesan} onChange={e => setNotifPesan(e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl resize-none" /></div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => setIsNotifFormOpen(false)} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={sendingNotif} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{sendingNotif ? 'Mengirim...' : 'Kirim Notifikasi'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+        </div>
+      </main>
 
       {/* ── Modal Block: Konfirmasi Profesional ── */}
       {confirmModal && confirmModal.isOpen && (
