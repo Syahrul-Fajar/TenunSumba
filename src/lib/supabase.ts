@@ -140,7 +140,8 @@ export const dbService = {
           status: (product.status || 'aktif').toUpperCase(),
           stok: product.stock ?? 5,
           id_kategori: product.id_kategori || null,
-          id_penenun: product.id_penenun || null
+          id_penenun: product.id_penenun || null,
+          updated_at: new Date().toISOString()
         };
 
         let result;
