@@ -31,6 +31,12 @@ const STATUS_PESANAN: Record<string, { label: string; cls: string }> = {
   dikirim:    { label: 'Dikirim',    cls: 'bg-amber-100 text-amber-800 border-amber-200' },
   selesai:    { label: 'Selesai',    cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   batal:      { label: 'Dibatalkan', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  MENUNGGU_PEMBAYARAN: { label: 'Menunggu Bayar', cls: 'bg-rose-100 text-rose-800 border-rose-200' },
+  MENUNGGU_KONFIRMASI: { label: 'Menunggu Konf', cls: 'bg-orange-100 text-orange-800 border-orange-200' },
+  DIPROSES:   { label: 'Diproses',   cls: 'bg-blue-100 text-blue-800 border-blue-200' },
+  DIKIRIM:    { label: 'Dikirim',    cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+  SELESAI:    { label: 'Selesai',    cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  DIBATALKAN: { label: 'Dibatalkan', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
 };
 
 const STATUS_PESAN: Record<string, { label: string; cls: string }> = {
@@ -799,7 +805,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {orders.slice(0, 6).map(o => {
-                        const statusConfig = STATUS_PESANAN[o.status] || STATUS_PESANAN.baru;
+                        const statusConfig = STATUS_PESANAN[o.status] || STATUS_PESANAN.menunggu;
                         return (
                           <div key={o.id} className="p-4 rounded-2xl border border-[#F1F5F9] bg-white/30 hover:bg-white hover:shadow-sm transition-all group">
                             <div className="flex justify-between items-start mb-3">
