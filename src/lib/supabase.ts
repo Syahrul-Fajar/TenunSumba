@@ -137,7 +137,7 @@ export const dbService = {
           gambar: product.image,
           deskripsi: product.description || '',
           makna_motif: product.maknaMotif || '',
-          status: product.status || 'aktif',
+          status: (product.status || 'aktif').toUpperCase(),
           stok: product.stock ?? 5,
           id_kategori: product.id_kategori || null,
           id_penenun: product.id_penenun || null
