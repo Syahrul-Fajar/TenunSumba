@@ -218,7 +218,8 @@ export const dbService = {
       }
     }
     return (username.toLowerCase() === 'tenunsumba' && password === 'tenunsumba') || 
-           (username.toLowerCase() === 'admin' && (password === 'admin' || password === '1234'));
+           (username.toLowerCase() === 'admin' && (password === 'admin' || password === '1234')) ||
+           (username.toLowerCase() === 'superadmin' && password === 'superadmin123');
   },
 
   // 3. ORDERS SERVICES (Manajemen Pesanan)
