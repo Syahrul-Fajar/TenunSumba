@@ -8,12 +8,12 @@ import ContactView from './components/ContactView';
 import AdminView from './components/AdminView';
 import ProductDetailModal from './components/ProductDetailModal';
 import AuthModal from './components/AuthModal';
-import { Product, User, Notifikasi } from './types';
+import { Product, User, Notifikasi, Wishlist, Alamat, Order } from './types';
 import { dbService, isSupabaseConfigured, supabase } from './lib/supabase';
 
 type Tab = 'home' | 'produk' | 'edukasi' | 'kontak' | 'admin';
 
-import { X, Trash2, ShoppingBag, CheckCircle2, AlertCircle, Tag } from 'lucide-react';
+import { X, Trash2, ShoppingBag, CheckCircle2, AlertCircle, Tag, Heart, Bell, Check, UserCog } from 'lucide-react';
 
 interface CartItem {
   product: Product;
@@ -65,11 +65,34 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
+  // Wishlist States
+  const [wishlistItems, setWishlistItems] = useState<Wishlist[]>([]);
+  const [isWishlistOpen, setIsWishlistOpen] = useState(false);
+
+  // Notification Drawer States
+  const [userNotifs, setUserNotifs] = useState<Notifikasi[]>([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+
+  // Profile Modal States
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileTab, setProfileTab] = useState<'profil' | 'pesanan' | 'alamat'>('profil');
+  const [userOrders, setUserOrders] = useState<Order[]>([]);
+  const [profileForm, setProfileForm] = useState({ nama_lengkap: '', no_telepon: '' });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMsg, setProfileMsg] = useState('');
+
+  // Address States (for checkout)
+  const [userAlamat, setUserAlamat] = useState<Alamat[]>([]);
+  const [selectedAlamatId, setSelectedAlamatId] = useState<number | null>(null);
+
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     sessionStorage.setItem('seraphine_user', JSON.stringify(user));
     syncKeranjangFromDB(user.id_user);
     checkNotif(user.id_user);
+    loadWishlist(user.id_user);
+    loadAlamat(user.id_user);
+    setProfileForm({ nama_lengkap: user.nama_lengkap, no_telepon: user.no_telepon || '' });
   };
 
   const handleLogout = () => {
@@ -77,11 +100,111 @@ export default function App() {
     sessionStorage.removeItem('seraphine_user');
     setCartItems([]);
     localStorage.removeItem('seraphine_cart');
+    setWishlistItems([]);
+    setUserNotifs([]);
+    setUnreadNotifCount(0);
+    setUserAlamat([]);
+    setSelectedAlamatId(null);
   };
 
   const checkNotif = async (userId: number) => {
     const notifs = await dbService.getNotifikasiUser(userId);
     setUnreadNotifCount(notifs.filter(n => !n.is_read).length);
+  };
+
+  // ── Wishlist Handlers ──
+  const loadWishlist = async (userId: number) => {
+    const items = await dbService.getWishlistByUser(userId);
+    setWishlistItems(items);
+  };
+
+  const handleToggleWishlist = async (productId: number) => {
+    if (!currentUser) return;
+    const exists = wishlistItems.some(w => w.id_produk === productId);
+    if (exists) {
+      await dbService.removeFromWishlist(currentUser.id_user, productId);
+    } else {
+      await dbService.addToWishlist(currentUser.id_user, productId);
+    }
+    await loadWishlist(currentUser.id_user);
+  };
+
+  // ── Notification Handlers ──
+  const loadNotifs = async (userId: number) => {
+    const notifs = await dbService.getNotifikasiUser(userId);
+    setUserNotifs(notifs);
+    setUnreadNotifCount(notifs.filter(n => !n.is_read).length);
+  };
+
+  const handleOpenNotif = async () => {
+    if (currentUser) await loadNotifs(currentUser.id_user);
+    setIsNotifOpen(true);
+  };
+
+  const handleMarkRead = async (id: number) => {
+    await dbService.markNotifikasiRead(id);
+    if (currentUser) await loadNotifs(currentUser.id_user);
+  };
+
+  const handleMarkAllRead = async () => {
+    if (!currentUser) return;
+    await dbService.markAllNotifikasiRead(currentUser.id_user);
+    await loadNotifs(currentUser.id_user);
+  };
+
+  const handleDeleteNotif = async (id: number) => {
+    await dbService.deleteNotifikasi(id);
+    if (currentUser) await loadNotifs(currentUser.id_user);
+  };
+
+  // ── Profile Handlers ──
+  const handleOpenProfile = async () => {
+    if (currentUser) {
+      setProfileForm({ nama_lengkap: currentUser.nama_lengkap, no_telepon: currentUser.no_telepon || '' });
+      setProfileMsg('');
+      const orders = await dbService.getUserOrders(currentUser.id_user);
+      setUserOrders(orders);
+    }
+    setProfileTab('profil');
+    setIsProfileOpen(true);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    setSavingProfile(true);
+    setProfileMsg('');
+    try {
+      await dbService.updateUserProfile(currentUser.id_user, {
+        nama_lengkap: profileForm.nama_lengkap,
+        no_telepon: profileForm.no_telepon
+      });
+      const updated = { ...currentUser, nama_lengkap: profileForm.nama_lengkap, no_telepon: profileForm.no_telepon };
+      setCurrentUser(updated);
+      sessionStorage.setItem('seraphine_user', JSON.stringify(updated));
+      setProfileMsg('Profil berhasil diperbarui!');
+    } catch {
+      setProfileMsg('Gagal memperbarui profil.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // ── Address Handlers ──
+  const loadAlamat = async (userId: number) => {
+    const list = await dbService.getAlamatByUser(userId);
+    setUserAlamat(list);
+    const def = list.find(a => a.is_default);
+    if (def) setSelectedAlamatId(def.id_alamat);
+  };
+
+  const selectAlamatForCheckout = (alamat: Alamat) => {
+    setSelectedAlamatId(alamat.id_alamat);
+    setCheckoutForm({
+      name: alamat.penerima,
+      phone: alamat.no_hp,
+      address: `${alamat.alamat_lengkap}, ${alamat.kelurahan}, ${alamat.kecamatan}, ${alamat.kota}, ${alamat.provinsi} ${alamat.kode_pos}`
+    });
   };
 
   // Sync Keranjang dari DB saat login
@@ -104,6 +227,9 @@ export default function App() {
     if (currentUser) {
       syncKeranjangFromDB(currentUser.id_user);
       checkNotif(currentUser.id_user);
+      loadWishlist(currentUser.id_user);
+      loadAlamat(currentUser.id_user);
+      setProfileForm({ nama_lengkap: currentUser.nama_lengkap, no_telepon: currentUser.no_telepon || '' });
     } else {
       try {
         const stored = localStorage.getItem('seraphine_cart');
@@ -275,15 +401,16 @@ export default function App() {
     try {
       const order = await dbService.createOrder({
         customerName: checkoutForm.name,
-        customerEmail: '—',
+        customerEmail: currentUser?.email || '—',
         customerPhone: checkoutForm.phone,
         customerAddress: checkoutForm.address,
         items: orderItems,
         totalPrice,
         status: 'menunggu',
         promoKode: appliedPromo?.kode,
-        diskon: diskonNominal
-      });
+        diskon: diskonNominal,
+        id_user: currentUser?.id_user
+      } as any);
 
       // Auto-create pembayaran record
       if (order && order.id) {
@@ -326,16 +453,19 @@ export default function App() {
     <div id="app-root" className="min-h-screen flex flex-col bg-[#FFFFFF] text-[#1A1A1A] font-sans selection:bg-[#7B1618] selection:text-white transition-colors duration-300">
       
       {isPublicView && (
-        <Header 
-          currentTab={currentTab} 
-          setCurrentTab={changeTab} 
-          cartCount={totalCartCount} 
-          onOpenCart={() => { setIsCartOpen(true); setIsCheckoutMode(false); }} 
+        <Header
+          currentTab={currentTab}
+          setCurrentTab={changeTab}
+          cartCount={totalCartCount}
+          onOpenCart={() => { setIsCartOpen(true); setIsCheckoutMode(false); }}
           currentUser={currentUser}
           unreadNotifCount={unreadNotifCount}
           onOpenAuth={() => setIsAuthModalOpen(true)}
           onLogout={handleLogout}
-          onOpenNotif={() => { /* TODO: Open Notification modal */ }}
+          onOpenNotif={handleOpenNotif}
+          wishlistCount={wishlistItems.length}
+          onOpenWishlist={() => setIsWishlistOpen(true)}
+          onOpenProfile={handleOpenProfile}
         />
       )}
 
@@ -353,11 +483,13 @@ export default function App() {
         {currentTab === 'admin' && <AdminView onRefresh={refreshCatalog} isAdmin={isAdmin} setIsAdmin={handleSetIsAdmin} setCurrentTab={changeTab} />}
       </main>
 
-      <ProductDetailModal 
-        product={selectedProduct} 
-        onClose={() => setSelectedProduct(null)} 
-        onAddToCart={addToCart} 
+      <ProductDetailModal
+        product={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        onAddToCart={addToCart}
         currentUser={currentUser}
+        onToggleWishlist={handleToggleWishlist}
+        wishlistProductIds={wishlistItems.map(w => w.id_produk)}
       />
 
       {isPublicView && <Footer setCurrentTab={changeTab} />}
@@ -401,10 +533,42 @@ export default function App() {
                     &larr; Kembali ke Keranjang
                   </button>
                   <p className="text-xs text-[#64748B] mb-4">Lengkapi informasi berikut untuk melanjutkan pengiriman mahakarya Anda.</p>
-                  
+
                   {orderError && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-600 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4" /> {orderError}
+                    </div>
+                  )}
+
+                  {/* Saved Addresses */}
+                  {currentUser && userAlamat.length > 0 && (
+                    <div>
+                      <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Pilih Alamat Tersimpan</label>
+                      <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
+                        {userAlamat.map(a => (
+                          <button
+                            key={a.id_alamat}
+                            type="button"
+                            onClick={() => selectAlamatForCheckout(a)}
+                            className={`w-full text-left p-3 rounded-xl border transition-all text-xs ${
+                              selectedAlamatId === a.id_alamat
+                                ? 'border-[#7B1618] bg-[#7B1618]/5'
+                                : 'border-[#F1F5F9] hover:border-[#7B1618]/30'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-[#1A1A1A]">{a.label || a.penerima}</span>
+                              {a.is_default && <span className="text-[8px] font-mono bg-[#7B1618]/10 text-[#7B1618] px-1.5 py-0.5 rounded">Default</span>}
+                            </div>
+                            <p className="text-[#64748B] mt-0.5 truncate">{a.alamat_lengkap}, {a.kota}</p>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="my-3 flex items-center gap-2 text-[9px] text-[#64748B]">
+                        <div className="flex-1 border-t border-[#F1F5F9]" />
+                        <span>atau isi manual</span>
+                        <div className="flex-1 border-t border-[#F1F5F9]" />
+                      </div>
                     </div>
                   )}
 
@@ -545,6 +709,210 @@ export default function App() {
 
           </div>
         </>
+      )}
+
+      {/* ── Slide-Over Drawer: Wishlist ── */}
+      {isWishlistOpen && (
+        <>
+          <div onClick={() => setIsWishlistOpen(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] animate-fade-in" />
+          <div className="fixed inset-y-0 right-0 z-[200] w-full max-w-md bg-[#FFFFFF] border-l border-[#F1F5F9] shadow-2xl flex flex-col animate-slide-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]">
+              <div className="flex items-center gap-2">
+                <Heart className="w-5 h-5 text-pink-600" />
+                <h3 className="font-serif text-lg font-bold text-[#1A1A1A]">Wishlist</h3>
+                <span className="text-xs text-[#64748B]">({wishlistItems.length})</span>
+              </div>
+              <button onClick={() => setIsWishlistOpen(false)} className="text-[#64748B] hover:text-[#7B1618]"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+              {wishlistItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center text-[#64748B]">
+                  <Heart className="w-12 h-12 mb-3 opacity-25" />
+                  <p className="text-sm font-medium">Wishlist Anda masih kosong.</p>
+                  <button onClick={() => { setIsWishlistOpen(false); changeTab('produk'); }} className="mt-4 text-xs font-bold uppercase text-[#7B1618] underline">Jelajahi Katalog</button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {wishlistItems.map(w => (
+                    <div key={w.id_wishlist} className="flex gap-4 p-3.5 bg-white border border-[#F1F5F9] rounded-2xl shadow-sm">
+                      {w.gambar && <img src={w.gambar} alt={w.nama_produk || ''} className="w-16 h-16 object-cover rounded-xl bg-[#F8FAFC]" />}
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-serif font-bold text-xs text-[#1A1A1A] truncate">{w.nama_produk}</h4>
+                        {w.harga && <p className="font-mono text-xs font-bold text-[#7B1618] mt-1">{formatPrice(w.harga)}</p>}
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            onClick={() => {
+                              const prod = products.find(p => Number(p.id) === w.id_produk);
+                              if (prod) { setSelectedProduct(prod); setIsWishlistOpen(false); }
+                            }}
+                            className="text-[10px] font-bold text-[#7B1618] underline"
+                          >
+                            Lihat Produk
+                          </button>
+                          <button onClick={() => handleToggleWishlist(w.id_produk)} className="p-1.5 text-gray-400 hover:text-red-600 transition-colors ml-auto">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Slide-Over Drawer: Notifikasi ── */}
+      {isNotifOpen && (
+        <>
+          <div onClick={() => setIsNotifOpen(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] animate-fade-in" />
+          <div className="fixed inset-y-0 right-0 z-[200] w-full max-w-md bg-[#FFFFFF] border-l border-[#F1F5F9] shadow-2xl flex flex-col animate-slide-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]">
+              <div className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-[#7B1618]" />
+                <h3 className="font-serif text-lg font-bold text-[#1A1A1A]">Notifikasi</h3>
+                {unreadNotifCount > 0 && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{unreadNotifCount} baru</span>}
+              </div>
+              <button onClick={() => setIsNotifOpen(false)} className="text-[#64748B] hover:text-[#7B1618]"><X className="w-5 h-5" /></button>
+            </div>
+            {unreadNotifCount > 0 && (
+              <div className="px-5 py-2 border-b border-[#F1F5F9] bg-[#F8FAFC]">
+                <button onClick={handleMarkAllRead} className="text-[10px] font-bold text-[#7B1618] uppercase tracking-wider">Tandai Semua Dibaca</button>
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+              {userNotifs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center text-[#64748B]">
+                  <Bell className="w-12 h-12 mb-3 opacity-25" />
+                  <p className="text-sm font-medium">Belum ada notifikasi.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {userNotifs.map(n => (
+                    <div key={n.id_notifikasi} className={`p-4 rounded-xl border transition-all ${n.is_read ? 'bg-white border-[#F1F5F9]' : 'bg-[#7B1618]/5 border-[#7B1618]/20'}`}>
+                      <div className="flex justify-between items-start gap-2">
+                        <p className="text-xs text-[#1A1A1A] flex-1">{n.pesan}</p>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {!n.is_read && (
+                            <button onClick={() => handleMarkRead(n.id_notifikasi)} className="p-1 text-[#7B1618] hover:bg-[#7B1618]/10 rounded" title="Tandai dibaca">
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button onClick={() => handleDeleteNotif(n.id_notifikasi)} className="p-1 text-gray-400 hover:text-red-600 rounded" title="Hapus">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[9px] text-[#64748B] font-mono mt-1">{new Date(n.created_at).toLocaleString('id-ID')}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Modal: Akun Saya (Profil, Pesanan, Alamat) ── */}
+      {isProfileOpen && currentUser && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 animate-fade-in">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsProfileOpen(false)} />
+          <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl animate-scale-in border border-[#F1F5F9] flex flex-col max-h-[85vh]">
+            <div className="p-6 border-b border-[#F1F5F9] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <UserCog className="w-6 h-6 text-[#7B1618]" />
+                <h3 className="font-serif text-xl font-bold text-[#1A1A1A]">Akun Saya</h3>
+              </div>
+              <button onClick={() => setIsProfileOpen(false)} className="p-2 text-[#64748B] hover:text-[#7B1618] hover:bg-red-50 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="flex px-6 border-b border-[#F1F5F9] shrink-0 gap-6">
+              <button onClick={() => setProfileTab('profil')} className={`py-4 text-sm font-bold border-b-2 transition-colors ${profileTab === 'profil' ? 'border-[#7B1618] text-[#7B1618]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}>Profil</button>
+              <button onClick={() => setProfileTab('pesanan')} className={`py-4 text-sm font-bold border-b-2 transition-colors ${profileTab === 'pesanan' ? 'border-[#7B1618] text-[#7B1618]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}>Riwayat Pesanan</button>
+              <button onClick={() => setProfileTab('alamat')} className={`py-4 text-sm font-bold border-b-2 transition-colors ${profileTab === 'alamat' ? 'border-[#7B1618] text-[#7B1618]' : 'border-transparent text-gray-500 hover:text-gray-900'}`}>Daftar Alamat</button>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              {profileTab === 'profil' && (
+                <form onSubmit={handleSaveProfile} className="space-y-4 max-w-md mx-auto">
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Email</label>
+                    <input type="email" disabled value={currentUser.email} className="w-full px-4 py-2.5 text-sm bg-[#F8FAFC] border border-[#F1F5F9] rounded-xl text-[#64748B]" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Nama Lengkap</label>
+                    <input type="text" required value={profileForm.nama_lengkap} onChange={e => setProfileForm({ ...profileForm, nama_lengkap: e.target.value })} className="w-full px-4 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl text-[#1A1A1A] focus:outline-none focus:border-[#7B1618] transition-colors" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#64748B] mb-1.5">No. Telepon</label>
+                    <input type="tel" value={profileForm.no_telepon} onChange={e => setProfileForm({ ...profileForm, no_telepon: e.target.value })} className="w-full px-4 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl text-[#1A1A1A] focus:outline-none focus:border-[#7B1618] transition-colors" placeholder="081234567890" />
+                  </div>
+                  {profileMsg && <p className={`text-xs font-semibold ${profileMsg.includes('berhasil') ? 'text-emerald-600' : 'text-red-600'}`}>{profileMsg}</p>}
+                  <button type="submit" disabled={savingProfile} className="w-full btn-primary py-3 text-xs tracking-wider uppercase font-bold disabled:opacity-50 mt-4">
+                    {savingProfile ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  </button>
+                </form>
+              )}
+
+              {profileTab === 'pesanan' && (
+                <div className="space-y-4">
+                  {userOrders.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 text-sm">Belum ada riwayat pesanan.</div>
+                  ) : (
+                    userOrders.map(order => (
+                      <div key={order.id} className="border border-gray-100 rounded-xl p-4 flex flex-col gap-3 hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-bold text-gray-400">Order ID: {order.id.slice(0, 8)}</span>
+                          <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg ${order.status === 'selesai' ? 'bg-emerald-100 text-emerald-700' : order.status === 'dibatalkan' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {order.status || 'MENUNGGU'}
+                          </span>
+                        </div>
+                        <div className="divide-y divide-gray-50">
+                          {order.items?.map((it: any, i: number) => (
+                            <div key={i} className="py-2 flex justify-between items-center">
+                              <div>
+                                <p className="text-sm font-bold text-gray-900">{it.productTitle}</p>
+                                <p className="text-xs text-gray-500">{it.quantity} x Rp {it.price.toLocaleString('id-ID')}</p>
+                              </div>
+                              <p className="text-sm font-bold text-[#7B1618]">Rp {(it.quantity * it.price).toLocaleString('id-ID')}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
+                          <span className="text-sm text-gray-500">Total Belanja</span>
+                          <span className="text-base font-bold text-[#7B1618]">Rp {order.totalPrice.toLocaleString('id-ID')}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {profileTab === 'alamat' && (
+                <div className="space-y-4">
+                  {userAlamat.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 text-sm">Belum ada alamat tersimpan.</div>
+                  ) : (
+                    userAlamat.map(a => (
+                      <div key={a.id_alamat} className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition-shadow relative">
+                        {a.is_default && <span className="absolute top-4 right-4 text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-1 rounded">Utama</span>}
+                        <h4 className="font-bold text-sm text-gray-900 mb-1">{a.label || 'Alamat'}</h4>
+                        <p className="text-sm font-semibold text-gray-700">{a.penerima} - {a.no_telepon}</p>
+                        <p className="text-xs text-gray-500 mt-1">{a.alamat_lengkap}</p>
+                        <p className="text-xs text-gray-500">{a.kota}, {a.provinsi} {a.kode_pos}</p>
+                      </div>
+                    ))
+                  )}
+                  {/* For simplicity, we don't implement full add/edit address form here, rely on checkout for now or a simple placeholder */}
+                  <div className="text-center mt-4">
+                    <p className="text-xs text-gray-400">Tambahkan alamat baru pada saat proses Checkout.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

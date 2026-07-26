@@ -3,10 +3,15 @@ import {
   Database, Plus, Trash2, Edit, Package, Clock, Mail, Lock,
   AlertCircle, X, RefreshCw, TrendingUp, DollarSign, Users,
   ShoppingCart, MessageSquare, BarChart3, Layers, Eye, Phone, LogOut, Wifi, WifiOff, Star, BookOpen,
-  Tag, MapPin, Percent, CreditCard, Truck, List, Award, Ruler, Menu
+  Tag, MapPin, Percent, CreditCard, Truck, List, Award, Ruler, Menu,
+  Shield, ChevronDown, ChevronUp, Image, FileText, Heart
 } from 'lucide-react';
-import { Product, Order, Article, Kategori, Penenun, KelompokPenenun, Promo, Pembayaran, Pengiriman, StokLog, CustomSize, Notifikasi, User } from '../types';
+import { Product, Order, Article, Kategori, Penenun, KelompokPenenun, Promo, Pembayaran, Pengiriman, StokLog, CustomSize, Notifikasi, User, Admin, Review, AuditLog, DetailPesanan, ProdukMedia, Wishlist, Alamat } from '../types';
 import { dbService, isSupabaseConfigured, supabase } from '../lib/supabase';
+import AdminOverview from './admin/AdminOverview';
+import AdminProducts from './admin/AdminProducts';
+import AdminOrders from './admin/AdminOrders';
+import AdminArticles from './admin/AdminArticles';
 
 interface AdminViewProps {
   onRefresh?: () => void;
@@ -27,16 +32,23 @@ const formatDateTime = (s: string) =>
 
 // ─── Configuration Constants ────────────────────────────────────────────────
 const STATUS_PESANAN: Record<string, { label: string; cls: string }> = {
-  menunggu:   { label: 'Menunggu',   cls: 'bg-rose-100 text-rose-800 border-rose-200' },
-  dikirim:    { label: 'Dikirim',    cls: 'bg-amber-100 text-amber-800 border-amber-200' },
-  selesai:    { label: 'Selesai',    cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  batal:      { label: 'Dibatalkan', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
   MENUNGGU_PEMBAYARAN: { label: 'Menunggu Bayar', cls: 'bg-rose-100 text-rose-800 border-rose-200' },
   MENUNGGU_KONFIRMASI: { label: 'Menunggu Konf', cls: 'bg-orange-100 text-orange-800 border-orange-200' },
   DIPROSES:   { label: 'Diproses',   cls: 'bg-blue-100 text-blue-800 border-blue-200' },
   DIKIRIM:    { label: 'Dikirim',    cls: 'bg-amber-100 text-amber-800 border-amber-200' },
   SELESAI:    { label: 'Selesai',    cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   DIBATALKAN: { label: 'Dibatalkan', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+};
+
+const normalizeOrderStatus = (s: string): string => {
+  const map: Record<string, string> = {
+    menunggu: 'MENUNGGU_PEMBAYARAN',
+    dikemas: 'DIPROSES',
+    dikirim: 'DIKIRIM',
+    selesai: 'SELESAI',
+    batal: 'DIBATALKAN',
+  };
+  return map[s] || (STATUS_PESANAN[s] ? s : 'MENUNGGU_PEMBAYARAN');
 };
 
 const STATUS_PESAN: Record<string, { label: string; cls: string }> = {
@@ -46,6 +58,28 @@ const STATUS_PESAN: Record<string, { label: string; cls: string }> = {
 };
 
 // ─── Sub-Component: StatCard (Memoized) ──────────────────────────────────────
+
+// Stock input that only commits on blur/Enter to avoid API calls on every keystroke
+const StockInput = React.memo(({ value, onCommit }: { value: number; onCommit: (v: number) => void }) => {
+  const [local, setLocal] = React.useState(value);
+  React.useEffect(() => { setLocal(value); }, [value]);
+  const commit = () => {
+    const clamped = Math.max(0, local);
+    if (clamped !== value) onCommit(clamped);
+  };
+  return (
+    <input
+      type="number"
+      min={0}
+      value={local}
+      onChange={e => setLocal(Number(e.target.value))}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+      className="w-20 px-3 py-1.5 text-center font-mono font-bold text-sm border border-[#F1F5F9] rounded-lg focus:outline-none"
+    />
+  );
+});
+
 const StatCard = React.memo(({
   label, value, sub, icon, accent = false
 }: { label: string; value: string | number; sub?: string; icon: React.ReactNode; accent?: boolean }) => (
@@ -91,18 +125,18 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
   const [authError, setAuthError]         = useState('');
   const [showPass, setShowPass]           = useState(false);
 
-  type AdminTab = 'overview' | 'products' | 'stock' | 'sizes' | 'orders' | 'articles' | 'kategori' | 'penenun' | 'promo' | 'pembayaran' | 'pengiriman' | 'notifications';
+  type AdminTab = 'overview' | 'products' | 'stock' | 'sizes' | 'orders' | 'articles' | 'kategori' | 'penenun' | 'promo' | 'pembayaran' | 'pengiriman' | 'notifications' | 'users' | 'admin-mgmt' | 'reviews' | 'audit';
   const [adminTab, setAdminTab] = useState<AdminTab>('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const [products,  setProducts]  = useState<Product[]>([]);
+  const [products,  setProducts]  = useState<Product[]>(() => { try { return JSON.parse(localStorage.getItem('cd_seraphine_products') || '[]'); } catch { return []; }});
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
 
   const openConfirm = (title: string, message: string, onConfirm: () => void) => {
     setConfirmModal({ isOpen: true, title, message, onConfirm });
   };
-  const [orders,    setOrders]    = useState<Order[]>([]);
-  const [articles,  setArticles]  = useState<Article[]>([]);
+  const [orders,    setOrders]    = useState<Order[]>(() => { try { return JSON.parse(localStorage.getItem('cd_seraphine_orders') || '[]'); } catch { return []; }});
+  const [articles,  setArticles]  = useState<Article[]>(() => { try { return JSON.parse(localStorage.getItem('cd_seraphine_articles') || '[]'); } catch { return []; }});
   const [isLoading, setIsLoading] = useState(false);
   const [dbSource,  setDbSource]  = useState<'Supabase' | 'LocalStorage'>('LocalStorage');
 
@@ -168,48 +202,67 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
 
   const [orderFilter, setOrderFilter] = useState<string>('all');
 
-  // ── Data Loader Logic ──────────────────────────────────────────────────────
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [prodList, ordList, artList, katList, penList, kelList, promList, bayarList, kirimList, stokList, sizeList] = await Promise.all([
-        dbService.getAllProducts(),
-        dbService.getAllOrders(),
-        dbService.getAllArticles(),
-        dbService.getAllKategori(),
-        dbService.getAllPenenun(),
-        dbService.getAllKelompokPenenun(),
-        dbService.getAllPromo(),
-        dbService.getAllPembayaran(),
-        dbService.getAllPengiriman(),
-        dbService.getStokLog(),
-        dbService.getAllSizes()
-      ]);
-      setProducts(prodList);
-      setOrders(ordList);
-      setArticles(artList);
-      setKategoriList(katList);
-      setPenenunList(penList);
-      setKelompokList(kelList);
-      setPromoList(promList);
-      setPembayaranList(bayarList);
-      setPengirimanList(kirimList);
-      setStokLog(stokList);
-      setSizesList(sizeList);
-      
-      // Also fetch users for notification feature if using supabase
-      if (isSupabaseConfigured && supabase) {
-        const { data: uList } = await supabase.from('users').select('id_user, nama_lengkap, email');
-        if (uList) setUsersList(uList as User[]);
-      }
+  // Admin management
+  const [adminList, setAdminList] = useState<Admin[]>([]);
+  const [editAdmin, setEditAdmin] = useState<Partial<Admin> | null>(null);
+  const [isAdminFormOpen, setIsAdminFormOpen] = useState(false);
+  const [adminErr, setAdminErr] = useState('');
+  const [savingAdmin, setSavingAdmin] = useState(false);
 
-      setDbSource(isSupabaseConfigured ? 'Supabase' : 'LocalStorage');
-      if (onRefresh) onRefresh();
-    } catch (err) {
-      console.error('Data sync execution failed:', err);
-    } finally {
-      setIsLoading(false);
-    }
+  // Review management
+  const [reviewList, setReviewList] = useState<Review[]>([]);
+  const [editReview, setEditReviewState] = useState<Partial<Review> | null>(null);
+  const [isRevFormOpen, setIsRevFormOpen] = useState(false);
+  const [revErr, setRevErr] = useState('');
+  const [savingRev, setSavingRev] = useState(false);
+
+  // Audit log
+  const [auditLogList, setAuditLogList] = useState<AuditLog[]>([]);
+  const [auditFilterTabel, setAuditFilterTabel] = useState('');
+
+  // Notification history
+  const [selectedNotifUser, setSelectedNotifUser] = useState<number | null>(null);
+  const [notifHistory, setNotifHistory] = useState<Notifikasi[]>([]);
+
+  // Order detail expand
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [orderDetails, setOrderDetails] = useState<DetailPesanan[]>([]);
+
+  // Product media
+  const [productMedia, setProductMedia] = useState<ProdukMedia[]>([]);
+
+  // Pengiriman form
+  const [isPengFormOpen, setIsPengFormOpen] = useState(false);
+  const [editPeng, setEditPeng] = useState<Partial<Pengiriman> | null>(null);
+  const [pengErr, setPengErr] = useState('');
+  const [savingPeng, setSavingPeng] = useState(false);
+
+  // ── Data Loader Logic ──────────────────────────────────────────────────────
+  const loadData = useCallback(() => {
+    setIsLoading(true);
+    
+    // Load each table independently to prevent one slow table from blocking the entire dashboard
+    dbService.getAllProducts().then(setProducts).catch(console.error);
+    dbService.getAllOrders().then(setOrders).catch(console.error);
+    dbService.getAllArticles().then(setArticles).catch(console.error);
+    dbService.getAllKategori().then(setKategoriList).catch(console.error);
+    dbService.getAllPenenun().then(setPenenunList).catch(console.error);
+    dbService.getAllKelompokPenenun().then(setKelompokList).catch(console.error);
+    dbService.getAllPromo().then(setPromoList).catch(console.error);
+    dbService.getAllPembayaran().then(setPembayaranList).catch(console.error);
+    dbService.getAllPengiriman().then(setPengirimanList).catch(console.error);
+    dbService.getStokLog().then(setStokLog).catch(console.error);
+    dbService.getAllSizes().then(setSizesList).catch(console.error);
+    dbService.getAllAdmin().then(setAdminList).catch(console.error);
+    dbService.getAllReviews().then(setReviewList).catch(console.error);
+    dbService.getAuditLog().then(setAuditLogList).catch(console.error);
+    dbService.getAllUsers().then(setUsersList).catch(console.error);
+
+    setDbSource(isSupabaseConfigured ? 'Supabase' : 'LocalStorage');
+    if (onRefresh) onRefresh();
+    
+    // Matikan loader secepat mungkin agar UI langsung tampil
+    setIsLoading(false);
   }, [onRefresh]);
 
   useEffect(() => {
@@ -426,19 +479,19 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     });
   };
 
-  const handleUpdateOrderStatus = async (id: string, status: Order['status']) => {
-    await dbService.updateOrderStatus(id, status);
-    
-    // Auto-notifikasi saat status berubah
-    if (status === 'dikirim' || status === 'selesai') {
+  const handleUpdateOrderStatus = async (id: string, status: string) => {
+    await dbService.updateOrderStatus(id, status as Order['status']);
+
+    const normalized = normalizeOrderStatus(status);
+    if (normalized === 'DIKIRIM' || normalized === 'SELESAI') {
       const order = orders.find(o => o.id === id);
       if (order) {
         const userMatch = usersList.find(u => u.nama_lengkap.toLowerCase() === order.customerName.toLowerCase());
         if (userMatch) {
           await dbService.createNotifikasi(
             userMatch.id_user,
-            `Pesanan Anda #${order.id} telah diupdate menjadi: ${STATUS_PESANAN[status].label}.`,
-            status === 'selesai' ? 'success' : 'info'
+            `Pesanan Anda #${order.id} telah diupdate menjadi: ${STATUS_PESANAN[normalized].label}.`,
+            normalized === 'SELESAI' ? 'success' : 'info'
           );
         }
       }
@@ -547,11 +600,95 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
     );
   };
 
+  // Admin handlers
+  const handleSaveAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminErr('');
+    if (!editAdmin?.username || !editAdmin?.email) { setAdminErr('Username dan email wajib diisi'); return; }
+    if (!editAdmin.id_admin && !editAdmin.password) { setAdminErr('Password wajib diisi untuk admin baru'); return; }
+    setSavingAdmin(true);
+    try {
+      await dbService.saveAdmin({ ...editAdmin as any });
+      setIsAdminFormOpen(false); setEditAdmin(null);
+      setAdminList(await dbService.getAllAdmin());
+    } catch (err: any) { setAdminErr(err?.message || 'Gagal menyimpan admin.'); }
+    finally { setSavingAdmin(false); }
+  };
+
+  const handleDeleteAdmin = (id: number) => {
+    openConfirm('Hapus Admin', 'Yakin hapus admin ini?', async () => {
+      await dbService.deleteAdmin(id);
+      setAdminList(prev => prev.filter(a => a.id_admin !== id));
+    });
+  };
+
+  // User handlers
+  const handleDeleteUser = (id: number) => {
+    openConfirm('Hapus Pengguna', 'Yakin hapus pengguna ini? Data terkait mungkin terpengaruh.', async () => {
+      await dbService.deleteUser(id);
+      setUsersList(prev => prev.filter(u => u.id_user !== id));
+    });
+  };
+
+  // Review handlers
+  const handleUpdateReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRevErr('');
+    if (!editReview?.id_review) return;
+    setSavingRev(true);
+    try {
+      await dbService.updateReview(editReview.id_review, { rating: editReview.rating, komentar: editReview.komentar });
+      setIsRevFormOpen(false); setEditReviewState(null);
+      setReviewList(await dbService.getAllReviews());
+    } catch { setRevErr('Gagal memperbarui ulasan.'); }
+    finally { setSavingRev(false); }
+  };
+
+  const handleDeleteReview = (id: number) => {
+    openConfirm('Hapus Ulasan', 'Yakin hapus ulasan ini?', async () => {
+      await dbService.deleteReview(id);
+      setReviewList(prev => prev.filter(r => r.id_review !== id));
+    });
+  };
+
+  // Pengiriman create handler
+  const handleSavePengiriman = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPengErr('');
+    if (!editPeng?.id_pesanan) { setPengErr('ID Pesanan wajib diisi'); return; }
+    setSavingPeng(true);
+    try {
+      await dbService.savePengiriman({ ...editPeng as any });
+      setIsPengFormOpen(false); setEditPeng(null);
+      setPengirimanList(await dbService.getAllPengiriman());
+    } catch { setPengErr('Gagal menyimpan pengiriman.'); }
+    finally { setSavingPeng(false); }
+  };
+
+  // Notification history loader
+  const loadNotifHistory = async (userId: number) => {
+    setSelectedNotifUser(userId);
+    const list = await dbService.getNotifikasiUser(userId);
+    setNotifHistory(list);
+  };
+
+  // Order detail expand
+  const toggleOrderDetail = async (orderId: string) => {
+    if (expandedOrderId === orderId) {
+      setExpandedOrderId(null);
+      setOrderDetails([]);
+      return;
+    }
+    setExpandedOrderId(orderId);
+    const details = await dbService.getDetailPesanan(Number(orderId));
+    setOrderDetails(details);
+  };
+
   // ── Memoized Metrics Calculation ───────────────────────────────────────────
   const metrics = useMemo(() => {
     const totalValuation = products.reduce((s, p) => s + p.price * (p.stock ?? 5), 0);
-    const completedRevenue = orders.filter(o => o.status === 'selesai').reduce((s, o) => s + o.totalPrice, 0);
-    const activeOrders = orders.filter(o => ['menunggu', 'dikirim'].includes(o.status)).length;
+    const completedRevenue = orders.filter(o => normalizeOrderStatus(o.status) === 'SELESAI').reduce((s, o) => s + o.totalPrice, 0);
+    const activeOrders = orders.filter(o => ['MENUNGGU_PEMBAYARAN', 'MENUNGGU_KONFIRMASI', 'DIPROSES', 'DIKIRIM'].includes(normalizeOrderStatus(o.status))).length;
     const lowStockProducts = products.filter(p => (p.stock ?? 5) <= 2);
     
     return { totalValuation, completedRevenue, activeOrders, lowStockProducts, totalProducts: products.length };
@@ -559,7 +696,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
 
 
 
-  const filteredOrders = useMemo(() => orderFilter === 'all' ? orders : orders.filter(o => o.status === orderFilter), [orders, orderFilter]);
+  const filteredOrders = useMemo(() => orderFilter === 'all' ? orders : orders.filter(o => normalizeOrderStatus(o.status) === orderFilter), [orders, orderFilter]);
 
   // ── Render View Condition ──────────────────────────────────────────────────
   if (!isAdmin) {
@@ -643,7 +780,12 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
           <SidebarBtn active={adminTab==='sizes'}      onClick={()=>{setAdminTab('sizes');setIsSidebarOpen(false);}}      icon={<Ruler />}         label="Ukuran Produk" badge={sizesList.length} />
           <SidebarBtn active={adminTab==='pembayaran'} onClick={()=>{setAdminTab('pembayaran');setIsSidebarOpen(false);}} icon={<CreditCard />}    label="Pembayaran" badge={pembayaranList.filter(p=>p.status==='menunggu').length} />
           <SidebarBtn active={adminTab==='pengiriman'} onClick={()=>{setAdminTab('pengiriman');setIsSidebarOpen(false);}} icon={<Truck />}         label="Pengiriman" badge={pengirimanList.filter(p=>p.status_pengiriman==='menunggu').length} />
-          <SidebarBtn active={adminTab==='notifications'} onClick={()=>{setAdminTab('notifications');setIsSidebarOpen(false);}} icon={<AlertCircle />} label="Kirim Notifikasi" />
+          <SidebarBtn active={adminTab==='notifications'} onClick={()=>{setAdminTab('notifications');setIsSidebarOpen(false);}} icon={<AlertCircle />} label="Notifikasi" />
+          <div className="my-2 border-t border-[#F1F5F9]" />
+          <SidebarBtn active={adminTab==='users'} onClick={()=>{setAdminTab('users');setIsSidebarOpen(false);}} icon={<Users />} label="Pengguna" badge={usersList.length} />
+          <SidebarBtn active={adminTab==='admin-mgmt'} onClick={()=>{setAdminTab('admin-mgmt');setIsSidebarOpen(false);}} icon={<Shield />} label="Admin" badge={adminList.length} />
+          <SidebarBtn active={adminTab==='reviews'} onClick={()=>{setAdminTab('reviews');setIsSidebarOpen(false);}} icon={<Star />} label="Ulasan" badge={reviewList.length} />
+          <SidebarBtn active={adminTab==='audit'} onClick={()=>{setAdminTab('audit');setIsSidebarOpen(false);}} icon={<FileText />} label="Audit Log" />
         </div>
 
         <div className="p-4 border-t border-[#F1F5F9]">
@@ -689,7 +831,11 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                  adminTab === 'promo' ? 'Kode Promo' :
                  adminTab === 'sizes' ? 'Ukuran Produk' :
                  adminTab === 'pembayaran' ? 'Pembayaran' :
-                 adminTab === 'pengiriman' ? 'Pengiriman' : 'Kirim Notifikasi'}
+                 adminTab === 'pengiriman' ? 'Pengiriman' :
+                 adminTab === 'users' ? 'Manajemen Pengguna' :
+                 adminTab === 'admin-mgmt' ? 'Manajemen Admin' :
+                 adminTab === 'reviews' ? 'Ulasan Pelanggan' :
+                 adminTab === 'audit' ? 'Audit Log' : 'Notifikasi'}
               </h2>
               <p className="text-xs text-gray-400 mt-1">Kelola data dan pantau aktivitas sistem Seraphine.</p>
             </div>
@@ -702,203 +848,31 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
           
           {/* ── Tab Layout Render Content (Bento Grid) ───────────────────────── */}
         {adminTab === 'overview' && (
-          <div className="space-y-6 animate-fade-in">
-            
-            {/* TIER 1: METRIK BENTO (Highlight Data Finansial) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-              <div>
-                <StatCard 
-                  accent 
-                  label="Valuasi Stok" 
-                  value={formatPrice(metrics.totalValuation)} 
-                  sub="Kapitalisasi aset katalog" 
-                  icon={<span className="font-mono font-bold text-sm select-none">Rp</span>}
-                />
-              </div>
-              <div>
-                <StatCard 
-                  label="Pendapatan Sukses" 
-                  value={formatPrice(metrics.completedRevenue)} 
-                  sub="Dari transaksi selesai" 
-                  icon={<TrendingUp className="w-5 h-5"/>} 
-                />
-              </div>
-              <div>
-                <StatCard 
-                  label="Pesanan Aktif" 
-                  value={metrics.activeOrders} 
-                  sub={`${orders.length} total pesanan`} 
-                  icon={<ShoppingCart className="w-5 h-5"/>} 
-                />
-              </div>
-              <div>
-                <StatCard 
-                  label="Total Karya" 
-                  value={metrics.totalProducts} 
-                  sub="Koleksi katalog aktif" 
-                  icon={<Package className="w-5 h-5"/>} 
-                />
-              </div>
-            </div>
-
-            {/* TIER 2: PANEL BENTO UTAMA (Operasional) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Kolom Kiri: Panel Restock (Span 1) */}
-              <div className="bg-white rounded-[24px] border border-[#F1F5F9] p-6 shadow-sm flex flex-col h-[420px]">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="font-serif font-bold text-stone-900 flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-maroon" /> Peringatan Stok
-                  </h3>
-                  <span className="text-[10px] font-bold bg-rose-100 text-maroon px-2.5 py-1 rounded-full">
-                    {metrics.lowStockProducts.length} Kritis
-                  </span>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                  {metrics.lowStockProducts.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-2">
-                      <Package className="w-10 h-10 opacity-20" />
-                      <p className="text-xs font-mono uppercase tracking-widest text-center mt-2">Kuantitas Stok<br/>Terjaga Aman</p>
-                    </div>
-                  ) : (
-                    metrics.lowStockProducts.map(p => (
-                      <div key={p.id} className="flex items-center gap-3 p-3 bg-white/50 rounded-2xl border border-[#F1F5F9] hover:border-maroon/30 transition-colors">
-                        <img src={p.image} className="w-12 h-14 object-cover rounded-xl border border-[#F1F5F9] flex-shrink-0" alt="" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-serif font-bold text-sm text-stone-900 truncate">{p.title}</p>
-                          <p className="text-[10px] text-gray-500 font-mono mt-0.5">{p.code}</p>
-                        </div>
-                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                          <span className="font-mono font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md text-[10px]">
-                            Stok: {p.stock ?? 5}
-                          </span>
-                          <button onClick={() => handleUpdateStock(p, (p.stock ?? 5) + 5)} className="px-2.5 py-1 bg-white border border-[#F1F5F9] hover:bg-emerald-50 hover:border-emerald-200 text-emerald-700 rounded-lg text-[10px] font-bold transition-all shadow-sm">
-                            +5 Unit
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Kolom Kanan: Panel Transaksi (Span 2) */}
-              <div className="lg:col-span-2 bg-white rounded-[24px] border border-[#F1F5F9] p-6 shadow-sm flex flex-col h-[420px]">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="font-serif font-bold text-stone-900 flex items-center gap-2">
-                    <Database className="w-5 h-5 text-maroon" /> Antrean Pesanan Terbaru
-                  </h3>
-                  {orders.length > 0 && (
-                    <button onClick={() => setAdminTab('orders')} className="text-[10px] font-bold text-maroon hover:text-maroon-dark transition-colors font-mono uppercase tracking-wider bg-maroon/5 hover:bg-maroon/10 px-3 py-1.5 rounded-lg">
-                      Lihat Semua Pesanan &rarr;
-                    </button>
-                  )}
-                </div>
-                
-                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                  {orders.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-3">
-                      <ShoppingCart className="w-12 h-12 opacity-20" />
-                      <p className="text-xs font-mono uppercase tracking-widest mt-2">Belum ada transaksi terekam</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {orders.slice(0, 6).map(o => {
-                        const statusConfig = STATUS_PESANAN[o.status] || STATUS_PESANAN.menunggu;
-                        return (
-                          <div key={o.id} className="p-4 rounded-2xl border border-[#F1F5F9] bg-white/30 hover:bg-white hover:shadow-sm transition-all group">
-                            <div className="flex justify-between items-start mb-3">
-                              <span className={`inline-flex text-[9px] font-bold font-mono px-2 py-1 rounded-md border ${statusConfig.cls}`}>
-                                {statusConfig.label}
-                              </span>
-                              <span className="text-[10px] text-gray-400 font-mono">{formatDate(o.createdAt)}</span>
-                            </div>
-                            <p className="font-bold text-sm text-stone-900 truncate" title={o.customerName}>{o.customerName}</p>
-                            <div className="flex justify-between items-end mt-2 pt-2 border-t border-[#F1F5F9]">
-                                <div className="text-[10px] text-[#64748B] font-mono truncate max-w-[180px]">
-                                  {o.items && o.items.length > 0 ? (
-                                    <span>
-                                      {o.items[0].productCode} ({o.items[0].quantity}x)
-                                      {o.items.length > 1 && ` +${o.items.length - 1} item`}
-                                    </span>
-                                  ) : (
-                                    <span>—</span>
-                                  )}
-                                </div>
-                                <p className="text-sm font-bold text-maroon">{formatPrice(o.totalPrice)}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-            </div>
-          </div>
+          <AdminOverview 
+            metrics={metrics}
+            orders={orders}
+            formatPrice={formatPrice}
+            formatDate={formatDate}
+            normalizeOrderStatus={normalizeOrderStatus}
+            STATUS_PESANAN={STATUS_PESANAN}
+            setAdminTab={setAdminTab}
+            handleUpdateStock={handleUpdateStock}
+            StatCard={StatCard}
+          />
         )}
 
         {/* Render Tab Konten Katalog */}
         {adminTab === 'products' && (
-          <div className="space-y-5 animate-fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
-              <p className="text-sm text-stone-700 font-medium">Registrasi Entri Katalog: <span className="font-bold text-maroon">{products.length} produk</span></p>
-              <button onClick={() => { setEditSizes([]); setEditProd({ title:'', category:'Kain Tenun', price: undefined, image:'', description:'', isFeatured:false, code:'TIS-NEW'+Math.floor(Math.random()*900+100), weaver:'Mama Penenun', stock: 1 }); setFormErr(''); setIsFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
-                <Plus className="w-4 h-4" /> Tambah Entri Kain
-              </button>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-[#F1F5F9] shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[900px]">
-                  <thead>
-                    <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
-                      <th className="p-4 text-center w-24">Visual</th>
-                      <th className="p-4">Karya Tenun</th>
-                      <th className="p-4 w-28">Kategori</th>
-                      <th className="p-4 w-32">Harga Satuan</th>
-                      <th className="p-4 w-20 text-center">Stok</th>
-                      <th className="p-4 w-28">Kode SKU</th>
-                      <th className="p-4 w-32">Penenun</th>
-                      <th className="p-4 w-24 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-cream-dark/40">
-                    {products.length === 0 ? (
-                      <tr><td colSpan={8} className="py-16 text-center text-gray-400 text-sm">Arsip kosong. Sila entri kain pertama.</td></tr>
-                    ) : products.map(p => (
-                      <tr key={p.id} className="hover:bg-white/30 transition-colors">
-                        <td className="p-4">
-                          <div className="w-14 h-18 mx-auto rounded-lg overflow-hidden border border-[#F1F5F9]">
-                            <img src={p.image} className="w-full h-full object-cover" alt="" />
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <p className="font-serif font-bold text-stone-900 text-sm leading-tight">{p.title}</p>
-                          {p.isFeatured && <span className="inline-flex items-center gap-0.5 text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded mt-1"><Star className="w-2.5 h-2.5"/>Featured</span>}
-                        </td>
-                        <td className="p-4"><span className="px-2 py-0.5 text-[10px] font-mono font-bold text-maroon bg-rose-50 border border-rose-200 rounded">{p.category}</span></td>
-                        <td className="p-4 font-bold text-maroon text-sm">{formatPrice(p.price)}</td>
-                        <td className="p-4 text-center">
-                          <span className={`px-2 py-1 rounded-lg font-mono font-bold text-xs ${p.stock === 0 ? 'bg-red-100 text-red-800' : (p.stock ?? 5) <= 2 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{p.stock ?? 5}</span>
-                        </td>
-                        <td className="p-4 font-mono font-bold text-gray-500 text-xs">{p.code}</td>
-                        <td className="p-4 text-stone-700 text-xs truncate max-w-[110px]">{p.weaver}</td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => { setEditSizes(sizesList.filter(s => s.id_produk === Number(p.id)).map(s => s.ukuran)); setEditProd({...p}); setFormErr(''); setIsFormOpen(true); }} className="p-1.5 bg-gray-100 text-gray-600 hover:text-stone-900 rounded-lg"><Edit className="w-3.5 h-3.5"/></button>
-                            <button onClick={() => handleDeleteProd(p.id)} className="p-1.5 bg-gray-100 text-gray-600 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <AdminProducts
+            products={products}
+            sizesList={sizesList}
+            setEditSizes={setEditSizes}
+            setEditProd={setEditProd}
+            setFormErr={setFormErr}
+            setIsFormOpen={setIsFormOpen}
+            handleDeleteProd={handleDeleteProd}
+            formatPrice={formatPrice}
+          />
         )}
 
         {/* Render Tab Konten Penyesuaian Stok Cepat */}
@@ -929,7 +903,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                         <td className="p-4"><span className="px-2 py-0.5 text-[10px] font-mono font-bold text-maroon bg-rose-50 border border-rose-100 rounded">{p.category}</span></td>
                         <td className="p-4">
                           <div className="flex items-center justify-center">
-                            <input type="number" min={0} value={p.stock ?? 5} onChange={e => handleUpdateStock(p, Number(e.target.value))} className="w-20 px-3 py-1.5 text-center font-mono font-bold text-sm border border-[#F1F5F9] rounded-lg focus:outline-none" />
+                            <StockInput value={p.stock ?? 5} onCommit={v => handleUpdateStock(p, v)} />
                           </div>
                         </td>
                         <td className="p-4">
@@ -945,99 +919,66 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                 </table>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Tab Konten Manifest Order Pelanggan */}
-        {adminTab === 'orders' && (
-          <div className="space-y-5 animate-fade-in">
+            {/* Riwayat Log Stok */}
             <div className="bg-white rounded-2xl border border-[#F1F5F9] shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[1000px]">
-                  <thead>
-                    <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
-                      <th className="p-4">Pelanggan</th>
-                      <th className="p-4">Item Komoditas</th>
-                      <th className="p-4 w-32">Total Pricing</th>
-                      <th className="p-4 w-32">Timestamp</th>
-                      <th className="p-4 w-36">Status Kerja</th>
-                      <th className="p-4 w-16 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-cream-dark/40">
-                    {filteredOrders.map(o => {
-                      const statusConfig = STATUS_PESANAN[o.status] || STATUS_PESANAN.menunggu;
-                      return (
-                        <tr key={o.id} className="hover:bg-white/30 transition-colors">
-                          <td className="p-4">
-                            <p className="font-bold text-sm text-stone-900">{o.customerName}</p>
-                            <p className="text-[10px] text-gray-500 font-mono">{o.customerEmail}</p>
-                            <a href={`https://wa.me/${o.customerPhone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-700 hover:underline font-mono flex items-center gap-1 mt-0.5">
-                              <Phone className="w-2.5 h-2.5"/>{o.customerPhone}
-                            </a>
-                          </td>
-                          <td className="p-4">
-                            {o.items && o.items.map((item, idx) => (
-                              <div key={idx} className="mb-2 last:mb-0 border-b border-[#F1F5F9]/20 pb-1.5 last:pb-0 last:border-b-0">
-                                <p className="font-serif font-bold text-sm text-stone-900">{item.productTitle}</p>
-                                <p className="text-[10px] text-gray-400 font-mono">{item.productCode} • {item.quantity} pcs</p>
-                              </div>
-                            ))}
-                          </td>
-                          <td className="p-4 font-mono font-bold text-maroon text-sm">{formatPrice(o.totalPrice)}</td>
-                          <td className="p-4 text-[11px] text-gray-400 font-mono">{formatDateTime(o.createdAt)}</td>
-                          <td className="p-4">
-                            <select value={o.status} onChange={e => handleUpdateOrderStatus(o.id, e.target.value as Order['status'])} className={`w-full px-2 py-1.5 text-xs font-bold rounded-lg border focus:outline-none cursor-pointer ${statusConfig.cls}`}>
-                              {Object.entries(STATUS_PESANAN).map(([v,st]) => <option key={v} value={v}>{st.label}</option>)}
-                            </select>
-                          </td>
-                          <td className="p-4 text-right">
-                            <button onClick={() => handleDeleteOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="p-4 border-b border-[#F1F5F9] flex items-center justify-between">
+                <h3 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-2"><List className="w-4 h-4 text-maroon" /> Riwayat Perubahan Stok</h3>
+                <span className="text-[10px] font-bold bg-[#F1F5F9] text-gray-500 px-2 py-1 rounded-full">{stokLog.length} log</span>
               </div>
+              {stokLog.length === 0 ? (
+                <div className="p-8 text-center text-gray-400"><p className="text-sm">Belum ada riwayat perubahan stok</p></div>
+              ) : (
+                <div className="overflow-x-auto"><table className="w-full text-left border-collapse min-w-[600px]"><thead>
+                  <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                    <th className="p-4 w-32">Tanggal</th><th className="p-4">Produk</th><th className="p-4 w-20 text-center">Masuk</th><th className="p-4 w-20 text-center">Keluar</th><th className="p-4">Keterangan</th><th className="p-4 w-16 text-right">Aksi</th>
+                  </tr>
+                </thead><tbody className="divide-y divide-[#F1F5F9]">
+                  {stokLog.slice(0, 50).map(s => (
+                    <tr key={s.id_stok} className="hover:bg-[#F8FAFC]/50">
+                      <td className="px-4 py-3 text-xs text-gray-400">{formatDateTime(s.tanggal)}</td>
+                      <td className="px-4 py-3 text-xs font-semibold text-stone-800">{s.nama_produk || `#${s.id_produk}`}</td>
+                      <td className="px-4 py-3 text-center">{s.jumlah_masuk > 0 ? <span className="text-xs font-bold text-emerald-600">+{s.jumlah_masuk}</span> : <span className="text-xs text-gray-300">—</span>}</td>
+                      <td className="px-4 py-3 text-center">{s.jumlah_keluar > 0 ? <span className="text-xs font-bold text-red-600">-{s.jumlah_keluar}</span> : <span className="text-xs text-gray-300">—</span>}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600">{s.keterangan || '—'}</td>
+                      <td className="px-4 py-3 text-right"><button onClick={() => openConfirm('Hapus Log', 'Yakin hapus log stok ini?', async () => { await dbService.deleteStokLog(s.id_stok); setStokLog(prev => prev.filter(x => x.id_stok !== s.id_stok)); })} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 className="w-3 h-3 text-red-500" /></button></td>
+                    </tr>
+                  ))}
+                </tbody></table></div>
+              )}
             </div>
           </div>
+        )}
+        {adminTab === 'orders' && (
+          <AdminOrders
+            orders={orders}
+            STATUS_PESANAN={STATUS_PESANAN}
+            normalizeOrderStatus={normalizeOrderStatus}
+            handleUpdateOrderStatus={handleUpdateOrderStatus}
+            expandedOrderId={expandedOrderId}
+            toggleOrderDetail={toggleOrderDetail}
+            orderDetails={orderDetails}
+            setOrderDetails={setOrderDetails}
+            openConfirm={openConfirm}
+            handleDeleteOrder={handleDeleteOrder}
+            formatPrice={formatPrice}
+            formatDateTime={formatDateTime}
+          />
         )}
 
 
 
         {/* Tab Konten Manajemen Artikel Edukasi */}
+        {/* Tab Konten Manajemen Artikel Edukasi */}
         {adminTab === 'articles' && (
-          <div className="space-y-5 animate-fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
-              <p className="text-sm text-stone-700 font-medium">Koleksi Artikel Budaya: <strong className="text-maroon">{articles.length} entri</strong></p>
-              <button onClick={() => { setEditArt({ title:'', excerpt:'', content:'', image:'', author:'Admin Seraphine', slug:'' }); setArtErr(''); setIsArtFormOpen(true); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase rounded-xl shadow flex items-center gap-2 cursor-pointer">
-                <Plus className="w-4 h-4"/> Rilis Artikel Baru
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {articles.map(art => (
-                <div key={art.id} className="bg-white rounded-2xl border border-[#F1F5F9] shadow-sm overflow-hidden hover:shadow-md">
-                  <img src={art.image} className="w-full h-40 object-cover" alt="" />
-                  <div className="p-4">
-                    <p className="font-serif font-bold text-stone-900 text-base leading-tight mb-1">{art.title}</p>
-                    <p className="text-xs text-gray-500 line-clamp-2 mb-3">{art.excerpt}</p>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-mono font-bold text-[#7B1618] uppercase">{art.author}</p>
-                        <p className="text-[10px] text-gray-400 font-mono">{formatDate(art.createdAt)}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <button onClick={() => { setEditArt({...art}); setArtErr(''); setIsArtFormOpen(true); }} className="p-1.5 bg-gray-100 rounded-lg"><Edit className="w-3.5 h-3.5"/></button>
-                        <button onClick={() => handleDeleteArt(art.id)} className="p-1.5 bg-gray-100 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <AdminArticles
+            articles={articles}
+            setEditArt={setEditArt}
+            setArtErr={setArtErr}
+            setIsArtFormOpen={setIsArtFormOpen}
+            formatDate={formatDate}
+            handleDeleteArt={handleDeleteArt}
+          />
         )}
 
       {/* ── Modal Block: Formulir Produk ─────────────────────────────────── */}
@@ -1405,6 +1346,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                       <th className="p-4 w-32">Jumlah</th>
                       <th className="p-4 w-28">Status</th>
                       <th className="p-4 w-32 text-right">Ubah Status</th>
+                      <th className="p-4 w-16 text-right">Aksi</th>
                     </tr>
                   </thead>
                 <tbody className="divide-y divide-[#F1F5F9]">
@@ -1424,6 +1366,9 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                             <option value="gagal">gagal</option>
                           </select>
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          <button onClick={() => openConfirm('Hapus Pembayaran', 'Yakin hapus data pembayaran ini?', async () => { await dbService.deletePembayaran(b.id_pembayaran); setPembayaranList(prev => prev.filter(x => x.id_pembayaran !== b.id_pembayaran)); })} className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-red-500" /></button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -1440,6 +1385,9 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
         <div className="space-y-5 animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
             <p className="text-sm text-stone-700 font-medium">Manajemen Pengiriman: <span className="font-bold text-maroon">{pengirimanList.length} pengiriman</span></p>
+            <button onClick={() => { setEditPeng({ id_pesanan: 0, ekspedisi: '', nomor_resi: '', status_pengiriman: 'menunggu' as any }); setIsPengFormOpen(true); setPengErr(''); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <Plus className="w-4 h-4" /> Tambah Pengiriman
+            </button>
           </div>
           <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
             {pengirimanList.length === 0 ? (
@@ -1455,6 +1403,7 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                       <th className="p-4">No. Resi</th>
                       <th className="p-4 w-28">Status</th>
                       <th className="p-4 w-64 text-right">Update Resi</th>
+                      <th className="p-4 w-16 text-right">Aksi</th>
                     </tr>
                   </thead>
                 <tbody className="divide-y divide-[#F1F5F9]">
@@ -1486,6 +1435,9 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
                               setPengirimanList(updated);
                             }} className="px-2 py-1 bg-maroon text-white text-xs font-bold rounded-lg cursor-pointer">Simpan</button>
                           </div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button onClick={() => openConfirm('Hapus Pengiriman', 'Yakin hapus data pengiriman ini?', async () => { await dbService.deletePengiriman(k.id_pengiriman); setPengirimanList(prev => prev.filter(x => x.id_pengiriman !== k.id_pengiriman)); })} className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-red-500" /></button>
                         </td>
                       </tr>
                     );
@@ -1547,14 +1499,44 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
       {adminTab === 'notifications' && (
         <div className="space-y-5 animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
-            <p className="text-sm text-stone-700 font-medium">Kirim Notifikasi Peringatan / Pengumuman</p>
+            <p className="text-sm text-stone-700 font-medium">Notifikasi & Pengumuman</p>
             <button onClick={() => setIsNotifFormOpen(true)} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
               <Plus className="w-4 h-4" /> Buat Notifikasi
             </button>
           </div>
-          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm p-6 text-center text-gray-500">
-            <AlertCircle className="w-10 h-10 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">Fitur Riwayat Notifikasi belum tersedia di panel ini. Anda dapat membuat dan mengirim notifikasi baru kepada pengguna.</p>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm p-6">
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <select value={selectedNotifUser || ''} onChange={e => { const uid = Number(e.target.value); if (uid) loadNotifHistory(uid); else { setSelectedNotifUser(null); setNotifHistory([]); } }} className="flex-1 px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl">
+                <option value="">Pilih pengguna untuk lihat riwayat...</option>
+                {usersList.map(u => <option key={u.id_user} value={u.id_user}>{u.nama_lengkap} ({u.email})</option>)}
+              </select>
+              {selectedNotifUser && notifHistory.length > 0 && (
+                <div className="flex gap-2">
+                  <button onClick={async () => { await dbService.markAllNotifikasiRead(selectedNotifUser); loadNotifHistory(selectedNotifUser); }} className="px-3 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-xl hover:bg-blue-100">Tandai Semua Dibaca</button>
+                  <button onClick={() => openConfirm('Hapus Semua Notifikasi', 'Yakin hapus semua notifikasi user ini?', async () => { await dbService.deleteAllNotifikasiUser(selectedNotifUser); setNotifHistory([]); })} className="px-3 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-xl hover:bg-red-100">Hapus Semua</button>
+                </div>
+              )}
+            </div>
+            {!selectedNotifUser ? (
+              <div className="text-center text-gray-400 py-8"><AlertCircle className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Pilih pengguna untuk melihat riwayat notifikasi</p></div>
+            ) : notifHistory.length === 0 ? (
+              <div className="text-center text-gray-400 py-8"><p className="text-sm">Tidak ada notifikasi untuk pengguna ini</p></div>
+            ) : (
+              <div className="space-y-2">
+                {notifHistory.map(n => (
+                  <div key={n.id_notifikasi} className={`flex items-center justify-between p-3 rounded-xl border ${n.is_read ? 'bg-white border-[#F1F5F9]' : 'bg-blue-50/50 border-blue-100'}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-stone-800">{n.pesan}</p>
+                      <p className="text-[10px] text-gray-400 mt-1">{n.created_at ? formatDateTime(n.created_at) : '—'} {n.tipe && <span className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-[9px] font-bold uppercase">{n.tipe}</span>}</p>
+                    </div>
+                    <div className="flex gap-1 ml-3 flex-shrink-0">
+                      {!n.is_read && <button onClick={async () => { await dbService.markNotifikasiRead(n.id_notifikasi); loadNotifHistory(selectedNotifUser!); }} className="px-2 py-1 text-[10px] font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">Dibaca</button>}
+                      <button onClick={() => openConfirm('Hapus Notifikasi', 'Hapus notifikasi ini?', async () => { await dbService.deleteNotifikasi(n.id_notifikasi); setNotifHistory(prev => prev.filter(x => x.id_notifikasi !== n.id_notifikasi)); })} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 className="w-3 h-3 text-red-500" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1673,6 +1655,200 @@ export default function AdminView({ onRefresh, isAdmin, setIsAdmin, setCurrentTa
               </div>
               <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Pesan *</label><textarea required rows={3} placeholder="Pesan notifikasi..." value={notifPesan} onChange={e => setNotifPesan(e.target.value)} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl resize-none" /></div>
               <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => setIsNotifFormOpen(false)} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={sendingNotif} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{sendingNotif ? 'Mengirim...' : 'Kirim Notifikasi'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: USERS ─────── */}
+      {adminTab === 'users' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Pengguna Terdaftar: <span className="font-bold text-maroon">{usersList.length} pengguna</span></p>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {usersList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><Users className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada pengguna terdaftar</p></div>
+            ) : (
+              <div className="overflow-x-auto"><table className="w-full text-left border-collapse min-w-[600px]"><thead>
+                <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                  <th className="p-4 w-16">ID</th><th className="p-4">Nama Lengkap</th><th className="p-4">Email</th><th className="p-4 w-32">Telepon</th><th className="p-4 w-32">Terdaftar</th><th className="p-4 w-16 text-right">Aksi</th>
+                </tr>
+              </thead><tbody className="divide-y divide-[#F1F5F9]">
+                {usersList.map(u => (
+                  <tr key={u.id_user} className="hover:bg-[#F8FAFC]/50">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-400">#{u.id_user}</td>
+                    <td className="px-4 py-3 font-bold text-sm text-stone-800">{u.nama_lengkap}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{u.email}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{u.no_telepon || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-400">{u.created_at ? formatDate(u.created_at) : '—'}</td>
+                    <td className="px-4 py-3 text-right"><button onClick={() => handleDeleteUser(u.id_user)} className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-red-500" /></button></td>
+                  </tr>
+                ))}
+              </tbody></table></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: ADMIN MANAGEMENT ─────── */}
+      {adminTab === 'admin-mgmt' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Admin Sistem: <span className="font-bold text-maroon">{adminList.length} admin</span></p>
+            <button onClick={() => { setEditAdmin({ username: '', email: '', role: 'ADMIN' }); setIsAdminFormOpen(true); setAdminErr(''); }} className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white text-xs font-bold uppercase tracking-wide rounded-xl shadow flex items-center gap-2 cursor-pointer">
+              <Plus className="w-4 h-4" /> Tambah Admin
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {adminList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><Shield className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada data admin</p></div>
+            ) : (
+              <div className="overflow-x-auto"><table className="w-full text-left border-collapse min-w-[700px]"><thead>
+                <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                  <th className="p-4 w-16">ID</th><th className="p-4">Username</th><th className="p-4">Email</th><th className="p-4">Nama Lengkap</th><th className="p-4 w-28">Role</th><th className="p-4 w-24 text-right">Aksi</th>
+                </tr>
+              </thead><tbody className="divide-y divide-[#F1F5F9]">
+                {adminList.map(a => (
+                  <tr key={a.id_admin} className="hover:bg-[#F8FAFC]/50">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-400">#{a.id_admin}</td>
+                    <td className="px-4 py-3 font-bold text-sm text-stone-800">{a.username}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{a.email}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{a.nama_lengkap || '—'}</td>
+                    <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">{a.role}</span></td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex gap-1.5 justify-end">
+                        <button onClick={() => { setEditAdmin(a); setIsAdminFormOpen(true); setAdminErr(''); }} className="p-1.5 hover:bg-amber-50 rounded-lg cursor-pointer"><Edit className="w-3.5 h-3.5 text-amber-600" /></button>
+                        <button onClick={() => handleDeleteAdmin(a.id_admin)} className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-red-500" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody></table></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: REVIEWS ─────── */}
+      {adminTab === 'reviews' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Ulasan Pelanggan: <span className="font-bold text-maroon">{reviewList.length} ulasan</span></p>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {reviewList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><Star className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada ulasan</p></div>
+            ) : (
+              <div className="overflow-x-auto"><table className="w-full text-left border-collapse min-w-[800px]"><thead>
+                <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                  <th className="p-4 w-16">ID</th><th className="p-4">Produk</th><th className="p-4">User</th><th className="p-4 w-24">Rating</th><th className="p-4">Komentar</th><th className="p-4 w-28">Tanggal</th><th className="p-4 w-24 text-right">Aksi</th>
+                </tr>
+              </thead><tbody className="divide-y divide-[#F1F5F9]">
+                {reviewList.map(r => (
+                  <tr key={r.id_review} className="hover:bg-[#F8FAFC]/50">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-400">#{r.id_review}</td>
+                    <td className="px-4 py-3 text-xs font-semibold text-stone-800">{(r as any).nama_produk || `Produk #${r.id_produk}`}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{r.nama_user || 'Anonim'}</td>
+                    <td className="px-4 py-3"><div className="flex gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} className={`w-3 h-3 ${s <= r.rating ? 'text-amber-400 fill-amber-400' : 'text-gray-200'}`} />)}</div></td>
+                    <td className="px-4 py-3 text-xs text-gray-600 max-w-[200px] truncate">{r.komentar || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-400">{r.created_at ? formatDate(r.created_at) : '—'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex gap-1.5 justify-end">
+                        <button onClick={() => { setEditReviewState(r); setIsRevFormOpen(true); setRevErr(''); }} className="p-1.5 hover:bg-amber-50 rounded-lg cursor-pointer"><Edit className="w-3.5 h-3.5 text-amber-600" /></button>
+                        <button onClick={() => handleDeleteReview(r.id_review)} className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-red-500" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody></table></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── TAB: AUDIT LOG ─────── */}
+      {adminTab === 'audit' && (
+        <div className="space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#F1F5F9] shadow-sm">
+            <p className="text-sm text-stone-700 font-medium">Log Aktivitas: <span className="font-bold text-maroon">{auditLogList.length} entri</span></p>
+            <select value={auditFilterTabel} onChange={e => setAuditFilterTabel(e.target.value)} className="px-3 py-2 text-xs border border-[#F1F5F9] rounded-xl">
+              <option value="">Semua Tabel</option>
+              {[...new Set(auditLogList.map(a => a.tabel))].sort().map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="bg-white rounded-2xl border border-[#F1F5F9] overflow-hidden shadow-sm">
+            {auditLogList.length === 0 ? (
+              <div className="p-12 text-center text-gray-400"><FileText className="w-10 h-10 mx-auto mb-3 opacity-20" /><p className="text-sm">Belum ada log aktivitas</p></div>
+            ) : (
+              <div className="overflow-x-auto"><table className="w-full text-left border-collapse min-w-[700px]"><thead>
+                <tr className="bg-white text-[10px] font-mono font-bold uppercase tracking-wider text-stone-700 border-b border-[#F1F5F9]">
+                  <th className="p-4 w-16">ID</th><th className="p-4">Admin</th><th className="p-4 w-24">Aksi</th><th className="p-4 w-24">Tabel</th><th className="p-4 w-24">ID Record</th><th className="p-4 w-32">Waktu</th>
+                </tr>
+              </thead><tbody className="divide-y divide-[#F1F5F9]">
+                {auditLogList.filter(a => !auditFilterTabel || a.tabel === auditFilterTabel).map(a => (
+                  <tr key={a.id_audit} className="hover:bg-[#F8FAFC]/50">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-400">#{a.id_audit}</td>
+                    <td className="px-4 py-3 text-xs text-stone-800">{a.nama_admin || '—'}</td>
+                    <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">{a.aksi}</span></td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{a.tabel}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-maroon">#{a.id_record}</td>
+                    <td className="px-4 py-3 text-xs text-gray-400">{a.created_at ? formatDateTime(a.created_at) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody></table></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────── MODALS: Admin ─────── */}
+      {isAdminFormOpen && editAdmin && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsAdminFormOpen(false); setEditAdmin(null); }}}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]"><h3 className="font-serif text-lg font-bold">{editAdmin.id_admin ? 'Edit Admin' : 'Tambah Admin'}</h3><button onClick={() => { setIsAdminFormOpen(false); setEditAdmin(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleSaveAdmin} className="p-6 space-y-4">
+              {adminErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl flex items-center gap-2"><AlertCircle className="w-4 h-4" />{adminErr}</div>}
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Username *</label><input type="text" required value={editAdmin.username||''} onChange={e => setEditAdmin({...editAdmin, username: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Email *</label><input type="email" required value={editAdmin.email||''} onChange={e => setEditAdmin({...editAdmin, email: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Nama Lengkap</label><input type="text" value={editAdmin.nama_lengkap||''} onChange={e => setEditAdmin({...editAdmin, nama_lengkap: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              {!editAdmin.id_admin && <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Password *</label><input type="password" required value={editAdmin.password||''} onChange={e => setEditAdmin({...editAdmin, password: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>}
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Role</label><select value={editAdmin.role||'ADMIN'} onChange={e => setEditAdmin({...editAdmin, role: e.target.value as any})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl"><option value="SUPER_ADMIN">Super Admin</option><option value="ADMIN">Admin</option><option value="STAFF">Staff</option></select></div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => { setIsAdminFormOpen(false); setEditAdmin(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={savingAdmin} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{savingAdmin ? 'Menyimpan...' : 'Simpan'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────── MODALS: Review Edit ─────── */}
+      {isRevFormOpen && editReview && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsRevFormOpen(false); setEditReviewState(null); }}}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]"><h3 className="font-serif text-lg font-bold">Edit Ulasan</h3><button onClick={() => { setIsRevFormOpen(false); setEditReviewState(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleUpdateReview} className="p-6 space-y-4">
+              {revErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl flex items-center gap-2"><AlertCircle className="w-4 h-4" />{revErr}</div>}
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Rating</label><div className="flex gap-1">{[1,2,3,4,5].map(s => <button key={s} type="button" onClick={() => setEditReviewState({...editReview, rating: s})} className="p-1"><Star className={`w-6 h-6 ${s <= (editReview.rating||0) ? 'text-amber-400 fill-amber-400' : 'text-gray-200'}`} /></button>)}</div></div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Komentar</label><textarea rows={3} value={editReview.komentar||''} onChange={e => setEditReviewState({...editReview, komentar: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl resize-none" /></div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => { setIsRevFormOpen(false); setEditReviewState(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={savingRev} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{savingRev ? 'Menyimpan...' : 'Simpan'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────── MODALS: Pengiriman Create ─────── */}
+      {isPengFormOpen && editPeng && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) { setIsPengFormOpen(false); setEditPeng(null); }}}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-5 bg-white border-b border-[#F1F5F9]"><h3 className="font-serif text-lg font-bold">Tambah Pengiriman</h3><button onClick={() => { setIsPengFormOpen(false); setEditPeng(null); }} className="text-gray-400 hover:text-red-600"><X className="w-5 h-5" /></button></div>
+            <form onSubmit={handleSavePengiriman} className="p-6 space-y-4">
+              {pengErr && <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-600 rounded-xl flex items-center gap-2"><AlertCircle className="w-4 h-4" />{pengErr}</div>}
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Pesanan *</label><select required value={editPeng.id_pesanan||''} onChange={e => setEditPeng({...editPeng, id_pesanan: Number(e.target.value)})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl"><option value="">Pilih Pesanan...</option>{orders.map(o => <option key={o.id} value={o.id}>#{o.id} - {o.customerName}</option>)}</select></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Ekspedisi</label><input type="text" placeholder="JNE, JNT, dll" value={editPeng.ekspedisi||''} onChange={e => setEditPeng({...editPeng, ekspedisi: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+                <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">No. Resi</label><input type="text" placeholder="No resi..." value={editPeng.nomor_resi||''} onChange={e => setEditPeng({...editPeng, nomor_resi: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl" /></div>
+              </div>
+              <div><label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">Status</label><select value={(editPeng as any).status_pengiriman||'menunggu'} onChange={e => setEditPeng({...editPeng, status_pengiriman: e.target.value as any})} className="w-full px-3 py-2.5 text-sm bg-white border border-[#F1F5F9] rounded-xl"><option value="menunggu">Menunggu</option><option value="diproses">Diproses</option><option value="dikirim">Dikirim</option><option value="tiba">Tiba</option></select></div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#F1F5F9]"><button type="button" onClick={() => { setIsPengFormOpen(false); setEditPeng(null); }} className="px-4 py-2 bg-gray-100 text-stone-700 text-xs font-bold uppercase rounded-xl">Batal</button><button type="submit" disabled={savingPeng} className="px-5 py-2 bg-maroon text-white text-xs font-bold uppercase rounded-xl shadow">{savingPeng ? 'Menyimpan...' : 'Simpan'}</button></div>
             </form>
           </div>
         </div>

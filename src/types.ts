@@ -69,6 +69,97 @@ export interface Article {
   createdAt: string;
 }
 
+// ── Admin ────────────────────────────────────────────────────────────────────
+
+export interface Admin {
+  id_admin: number;
+  username: string;
+  password?: string;
+  email: string;
+  nama_lengkap?: string;
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'STAFF';
+  created_at?: string;
+  deleted_at?: string | null;
+}
+
+// ── Alamat ───────────────────────────────────────────────────────────────────
+
+export interface Alamat {
+  id_alamat: number;
+  id_user: number;
+  label?: string;
+  penerima: string;
+  no_hp: string;
+  provinsi: string;
+  kota: string;
+  kecamatan: string;
+  kelurahan: string;
+  kode_pos: string;
+  alamat_lengkap: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  is_default: boolean;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+}
+
+// ── Produk Media ─────────────────────────────────────────────────────────────
+
+export interface ProdukMedia {
+  id_media: number;
+  id_produk: number;
+  url: string;
+  tipe: 'IMAGE' | 'VIDEO';
+  urutan: number;
+  created_at?: string;
+}
+
+// ── Detail Pesanan ───────────────────────────────────────────────────────────
+
+export interface DetailPesanan {
+  id_detail: number;
+  id_pesanan: number;
+  id_produk: number;
+  jumlah: number;
+  harga_satuan: number;
+  is_custom: boolean;
+  produk_snapshot?: any;
+  varian?: any;
+  // Joined
+  nama_produk?: string;
+}
+
+// ── Wishlist ─────────────────────────────────────────────────────────────────
+
+export interface Wishlist {
+  id_wishlist: number;
+  id_user: number;
+  id_produk: number;
+  created_at?: string;
+  // Joined
+  nama_produk?: string;
+  harga?: number;
+  gambar?: string;
+}
+
+// ── Audit Log ────────────────────────────────────────────────────────────────
+
+export interface AuditLog {
+  id_audit: number;
+  id_admin?: number | null;
+  id_user?: number | null;
+  aksi: string;
+  tabel: string;
+  id_record: number;
+  data_sebelum?: any;
+  data_sesudah?: any;
+  created_at?: string;
+  // Joined
+  nama_admin?: string;
+}
+
 // ── New Table Types ────────────────────────────────────────────────────────────
 
 export interface Kategori {

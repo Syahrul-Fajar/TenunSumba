@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Product, ContactMessage, Order, Article, OrderItem, Kategori, Penenun, KelompokPenenun, Promo, Review, Pembayaran, Pengiriman, StokLog, User, KeranjangItem, Notifikasi, CustomSize } from '../types';
+import { Product, ContactMessage, Order, Article, OrderItem, Kategori, Penenun, KelompokPenenun, Promo, Review, Pembayaran, Pengiriman, StokLog, User, KeranjangItem, Notifikasi, CustomSize, Wishlist, Alamat, Admin, DetailPesanan } from '../types';
 import { PRODUCTS } from '../data/products';
 
 const rawSupabaseUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || '').trim();
@@ -100,7 +100,7 @@ export const dbService = {
           .select('*')
           .order('created_at', { ascending: false });
         if (!error && data) {
-          return data.map((item: any) => ({
+          const mapped = data.map((item: any) => ({
             id: String(item.id_produk),
             title: item.nama_produk,
             category: 'Kain Tenun',
@@ -116,6 +116,8 @@ export const dbService = {
             makingTime: '3 Bulan',
             stock: item.stok !== undefined && item.stok !== null ? Number(item.stok) : 5
           }));
+          localDb.saveProducts(mapped);
+          return mapped;
         }
         console.warn('Supabase products fetch failed or table missing, utilizing LocalStorage fallback.', error);
       } catch (err) {
@@ -232,7 +234,7 @@ export const dbService = {
           .select('*, detail_pesanan(*, produk(*))')
           .order('created_at', { ascending: false });
         if (!error && data) {
-          return data.map((item: any) => {
+          const mappedOrders = data.map((item: any) => {
             const items: OrderItem[] = (item.detail_pesanan || []).map((det: any) => ({
               productId: String(det.id_produk),
               productTitle: det.produk ? det.produk.nama_produk : 'Kain Tenun Sumba',
@@ -265,6 +267,8 @@ export const dbService = {
               createdAt: item.created_at
             };
           });
+          localDb.saveOrders(mappedOrders);
+          return mappedOrders;
         }
         console.warn('Supabase orders fetch failed or table missing, utilizing LocalStorage fallback.', error);
       } catch (err) {
@@ -1018,6 +1022,183 @@ export const dbService = {
       return false;
     }
   },
+  async deleteUser(id_user: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('users').update({ deleted_at: new Date().toISOString() }).eq('id_user', id_user);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+  async getAllReviews(): Promise<Review[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from('review').select('*, users(nama_lengkap), produk(nama_produk)').is('deleted_at', null).order('created_at', { ascending: false });
+      if (error) return [];
+      return (data || []).map((r: any) => ({ ...r, nama_user: r.users?.nama_lengkap || 'Anonim', nama_produk: r.produk?.nama_produk || '—' })) as Review[];
+    } catch (err) { return []; }
+  },
+  async updateReview(id_review: number, updates: Partial<Pick<Review, 'rating' | 'komentar'>>): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('review').update(updates).eq('id_review', id_review);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+  async deleteReview(id_review: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('review').update({ deleted_at: new Date().toISOString() }).eq('id_review', id_review);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+  async deletePembayaran(id_pembayaran: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('pembayaran').delete().eq('id_pembayaran', id_pembayaran);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+  async deletePengiriman(id_pengiriman: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('pengiriman').delete().eq('id_pengiriman', id_pengiriman);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+  async deleteNotifikasi(id_notifikasi: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('notifikasi').delete().eq('id_notifikasi', id_notifikasi);
+    if (error) return false;
+    return true;
+  },
+  async deleteAllNotifikasiUser(id_user: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('notifikasi').delete().eq('id_user', id_user);
+    if (error) return false;
+    return true;
+  },
+  async deleteStokLog(id_stok: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('stok_log').delete().eq('id_stok', id_stok);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+  async getWishlistByUser(id_user: number): Promise<Wishlist[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from('wishlist').select('*, produk(*)').eq('id_user', id_user);
+      if (error) return [];
+      return (data || []).map((w: any) => ({ ...w, nama_produk: w.produk?.nama_produk || '', harga: w.produk?.harga || 0, gambar: w.produk?.gambar || '' })) as Wishlist[];
+    } catch { return []; }
+  },
+  async addToWishlist(id_user: number, id_produk: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('wishlist').insert([{ id_user, id_produk }]);
+    return !error;
+  },
+  async removeFromWishlist(id_user: number, id_produk: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('wishlist').delete().eq('id_user', id_user).eq('id_produk', id_produk);
+    return !error;
+  },
+  async isInWishlist(id_user: number, id_produk: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { data } = await supabase.from('wishlist').select('id_wishlist').eq('id_user', id_user).eq('id_produk', id_produk).limit(1);
+    return data && data.length > 0;
+  },
+  async getAlamatByUser(id_user: number): Promise<Alamat[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from('alamat').select('*').eq('id_user', id_user).is('deleted_at', null).order('is_default', { ascending: false });
+      if (error) return [];
+      return data as Alamat[];
+    } catch { return []; }
+  },
+  async saveAlamat(a: Omit<Alamat, 'id_alamat' | 'created_at' | 'updated_at' | 'deleted_at'> & { id_alamat?: number }): Promise<Alamat> {
+    if (!supabase) throw new Error('Supabase error');
+    if (a.is_default) await supabase.from('alamat').update({ is_default: false }).eq('id_user', a.id_user).eq('is_default', true);
+    let result;
+    if (a.id_alamat) result = await supabase.from('alamat').update(a).eq('id_alamat', a.id_alamat).select();
+    else result = await supabase.from('alamat').insert([a]).select();
+    if (result.error) throw result.error;
+    return result.data[0] as Alamat;
+  },
+  async deleteAlamat(id_alamat: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('alamat').update({ deleted_at: new Date().toISOString() }).eq('id_alamat', id_alamat);
+    return !error;
+  },
+  async setDefaultAlamat(id_user: number, id_alamat: number): Promise<boolean> {
+    if (!supabase) return false;
+    await supabase.from('alamat').update({ is_default: false }).eq('id_user', id_user).eq('is_default', true);
+    const { error } = await supabase.from('alamat').update({ is_default: true }).eq('id_alamat', id_alamat);
+    return !error;
+  },
+  async getAllAdmin(): Promise<Admin[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from('admin').select('id_admin, username, email, nama_lengkap, role, created_at, deleted_at').is('deleted_at', null).order('created_at');
+      if (error) return [];
+      return data as Admin[];
+    } catch { return []; }
+  },
+  async getAdminById(id_admin: number): Promise<Admin | null> {
+    if (!supabase) return null;
+    const { data } = await supabase.from('admin').select('*').eq('id_admin', id_admin).is('deleted_at', null).limit(1);
+    return data && data.length > 0 ? data[0] as Admin : null;
+  },
+  async saveAdmin(a: Omit<Admin, 'id_admin' | 'created_at'> & { id_admin?: number }): Promise<Admin> {
+    if (!supabase) throw new Error('Supabase error');
+    let result;
+    if (a.id_admin) result = await supabase.from('admin').update(a).eq('id_admin', a.id_admin).select();
+    else result = await supabase.from('admin').insert([a]).select();
+    if (result.error) throw result.error;
+    return result.data[0] as Admin;
+  },
+  async deleteAdmin(id_admin: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('admin').update({ deleted_at: new Date().toISOString() }).eq('id_admin', id_admin);
+    return !error;
+  },
+  async getDetailPesanan(id_pesanan: number): Promise<DetailPesanan[]> {
+    if (!supabase) return [];
+    const { data } = await supabase.from('detail_pesanan').select('*, produk(nama_produk)').eq('id_pesanan', id_pesanan);
+    return (data || []).map((d: any) => ({ ...d, nama_produk: d.produk?.nama_produk })) as DetailPesanan[];
+  },
+  async saveDetailPesanan(d: Omit<DetailPesanan, 'id_detail' | 'nama_produk'> & { id_detail?: number }): Promise<DetailPesanan> {
+    if (!supabase) throw new Error('Supabase error');
+    let result;
+    if (d.id_detail) result = await supabase.from('detail_pesanan').update(d).eq('id_detail', d.id_detail).select();
+    else result = await supabase.from('detail_pesanan').insert([d]).select();
+    if (result.error) throw result.error;
+    return result.data[0] as DetailPesanan;
+  },
+  async deleteDetailPesanan(id_detail: number): Promise<boolean> {
+    if (!supabase) return false;
+    const { error } = await supabase.from('detail_pesanan').delete().eq('id_detail', id_detail);
+    return !error;
+  },
+  async getUserOrders(id_user: number): Promise<Order[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from('pesanan').select('*').eq('id_user', id_user).order('created_at', { ascending: false });
+      if (error) return [];
+      return data.map((d: any) => ({
+        id: String(d.id_pesanan), customerName: d.nama_pelanggan || '', customerEmail: d.email || '',
+        customerPhone: d.no_telepon || '', customerAddress: d.alamat || '', status: d.status || 'menunggu_pembayaran',
+        totalPrice: Number(d.total_harga), createdAt: d.created_at, items: []
+      })) as Order[];
+    } catch { return []; }
+  },
+  async getAuditLog(): Promise<any[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from('audit_log').select('*').order('created_at', { ascending: false });
+      return error ? [] : data;
+    } catch { return []; }
+  },
+  async getAllUsers(): Promise<User[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from('users').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+      return error ? [] : data as User[];
+    } catch { return []; }
+  }
 };
 
 

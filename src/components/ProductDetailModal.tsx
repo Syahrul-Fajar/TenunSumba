@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, ShoppingBag, Ruler, Star, Send } from 'lucide-react';
+import { X, Calendar, ShoppingBag, Ruler, Star, Send, Heart } from 'lucide-react';
 import { Product, CustomSize, Review, User } from '../types';
 import { dbService } from '../lib/supabase';
 
@@ -8,11 +8,13 @@ interface ProductDetailModalProps {
   onClose: () => void;
   onAddToCart: (product: Product, quantity: number, ukuran?: string) => void;
   currentUser?: User | null;
+  onToggleWishlist?: (productId: number) => void;
+  wishlistProductIds?: number[];
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 
-export default function ProductDetailModal({ product, onClose, onAddToCart, currentUser }: ProductDetailModalProps) {
+export default function ProductDetailModal({ product, onClose, onAddToCart, currentUser, onToggleWishlist, wishlistProductIds = [] }: ProductDetailModalProps) {
   const [quantity, setQuantity] = useState(1);
   const [sizes, setSizes] = useState<CustomSize[]>([]);
   const [selectedSize, setSelectedSize] = useState<string>('');
@@ -140,24 +142,33 @@ export default function ProductDetailModal({ product, onClose, onAddToCart, curr
             </div>
 
             {/* Pilihan Ukuran */}
-            {sizes.length > 0 && !isOutOfStock && (
+            {!isOutOfStock && (
               <div className="mt-6">
-                <span className={labelCls}>Pilih Ukuran</span>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {sizes.map(size => (
-                    <button
-                      key={size.id_size}
-                      onClick={() => setSelectedSize(size.ukuran)}
-                      className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
-                        selectedSize === size.ukuran 
-                          ? 'bg-[#7B1618] text-white border-[#7B1618]' 
-                          : 'bg-white text-[#64748B] border-[#F1F5F9] hover:border-[#7B1618] hover:text-[#7B1618]'
-                      }`}
-                    >
-                      {size.ukuran}
-                    </button>
-                  ))}
-                </div>
+                <span className={labelCls}>Tentukan Ukuran Produk (Pilih atau Ketik)</span>
+                <input
+                  type="text"
+                  placeholder="Contoh: S, M, L, XL, atau Custom 200x100 cm"
+                  value={selectedSize}
+                  onChange={(e) => setSelectedSize(e.target.value)}
+                  className="w-full mt-2 px-4 py-3 text-sm bg-white border border-[#F1F5F9] rounded-xl text-[#1A1A1A] focus:outline-none focus:border-[#7B1618] transition-colors font-mono"
+                />
+                {sizes.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {sizes.map(size => (
+                      <button
+                        key={size.id_size}
+                        onClick={() => setSelectedSize(size.ukuran)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${
+                          selectedSize === size.ukuran 
+                            ? 'bg-[#7B1618] text-white border-[#7B1618]' 
+                            : 'bg-white text-[#64748B] border-[#F1F5F9] hover:border-[#7B1618] hover:text-[#7B1618]'
+                        }`}
+                      >
+                        {size.ukuran}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -173,11 +184,23 @@ export default function ProductDetailModal({ product, onClose, onAddToCart, curr
               </div>
             )}
 
-            <div className="pt-6 mt-6">
-              <button 
-                onClick={handleAdd} 
-                disabled={isOutOfStock} 
-                className={`w-full flex justify-center gap-2 py-4 text-sm font-bold text-white rounded-xl transition-all ${isOutOfStock ? 'bg-[#C8B8A6] cursor-not-allowed' : 'btn-primary'}`}
+            <div className="pt-6 mt-6 flex gap-3">
+              {currentUser && onToggleWishlist && (
+                <button
+                  onClick={() => onToggleWishlist(Number(product.id))}
+                  className={`flex items-center justify-center w-14 rounded-xl border transition-all ${
+                    wishlistProductIds.includes(Number(product.id))
+                      ? 'bg-pink-50 border-pink-300 text-pink-600'
+                      : 'bg-white border-[#F1F5F9] text-[#64748B] hover:border-pink-300 hover:text-pink-500'
+                  }`}
+                >
+                  <Heart className={`w-5 h-5 ${wishlistProductIds.includes(Number(product.id)) ? 'fill-current' : ''}`} />
+                </button>
+              )}
+              <button
+                onClick={handleAdd}
+                disabled={isOutOfStock}
+                className={`flex-1 flex justify-center gap-2 py-4 text-sm font-bold text-white rounded-xl transition-all ${isOutOfStock ? 'bg-[#C8B8A6] cursor-not-allowed' : 'btn-primary'}`}
               >
                 <ShoppingBag className="w-5 h-5" /> {isOutOfStock ? 'Stok Habis' : 'Masukkan ke Keranjang'}
               </button>

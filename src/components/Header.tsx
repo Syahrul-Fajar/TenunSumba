@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ShoppingBag, User, LogOut, Bell } from 'lucide-react';
+import { Menu, X, ShoppingBag, User, LogOut, Bell, Heart, UserCog } from 'lucide-react';
 import { User as UserType } from '../types';
 
 type Tab = 'home' | 'produk' | 'edukasi' | 'kontak' | 'admin';
@@ -14,6 +14,9 @@ interface HeaderProps {
   onOpenAuth?: () => void;
   onLogout?: () => void;
   onOpenNotif?: () => void;
+  wishlistCount?: number;
+  onOpenWishlist?: () => void;
+  onOpenProfile?: () => void;
 }
 
 const NAV = [
@@ -23,7 +26,7 @@ const NAV = [
   { id: 'kontak' as const, label: 'Kontak' },
 ];
 
-export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCart, currentUser, unreadNotifCount = 0, onOpenAuth, onLogout, onOpenNotif }: HeaderProps) {
+export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCart, currentUser, unreadNotifCount = 0, onOpenAuth, onLogout, onOpenNotif, wishlistCount = 0, onOpenWishlist, onOpenProfile }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -120,6 +123,23 @@ export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCar
               </button>
             )}
 
+            {/* Wishlist */}
+            {currentUser && (
+              <button
+                onClick={onOpenWishlist}
+                className={`relative p-2 rounded-xl transition-all hover:scale-105 cursor-pointer ${
+                  isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+                }`}
+              >
+                <Heart className="w-5 h-5" />
+                {wishlistCount > 0 && (
+                  <span className="absolute top-1 right-1 bg-pink-500 text-white text-[8px] font-bold font-mono px-1 rounded-full flex items-center justify-center min-w-3 h-3 shadow border border-[#FFFFFF]">
+                    {wishlistCount}
+                  </span>
+                )}
+              </button>
+            )}
+
             {/* Shopping Cart */}
             <button
               onClick={onOpenCart}
@@ -154,9 +174,15 @@ export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCar
                     <p className="text-xs font-bold text-[#1A1A1A] truncate">{currentUser.nama_lengkap}</p>
                     <p className="text-[10px] text-[#64748B] truncate">{currentUser.email}</p>
                   </div>
-                  <button 
+                  <button
+                    onClick={onOpenProfile}
+                    className="flex items-center gap-2 p-3 text-sm text-[#1A1A1A] hover:bg-[#F8FAFC] transition-colors w-full text-left font-semibold"
+                  >
+                    <UserCog className="w-4 h-4" /> Edit Profil
+                  </button>
+                  <button
                     onClick={onLogout}
-                    className="flex items-center gap-2 p-3 text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left font-semibold"
+                    className="flex items-center gap-2 p-3 text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left font-semibold border-t border-[#F1F5F9]"
                   >
                     <LogOut className="w-4 h-4" /> Keluar
                   </button>
@@ -179,6 +205,22 @@ export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCar
               {unreadNotifCount > 0 && (
                 <span className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold font-mono px-1 rounded-full flex items-center justify-center min-w-3 h-3 shadow border border-[#FFFFFF]">
                   {unreadNotifCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {currentUser && (
+            <button
+              onClick={onOpenWishlist}
+              className={`relative p-2 rounded-xl transition-colors cursor-pointer ${
+                isTransparentDark ? 'text-white hover:bg-white/10' : 'text-[#1A1A1A] hover:bg-[#1A1A1A]/5'
+              }`}
+            >
+              <Heart className="w-5 h-5" />
+              {wishlistCount > 0 && (
+                <span className="absolute top-1 right-1 bg-pink-500 text-white text-[8px] font-bold font-mono px-1 rounded-full flex items-center justify-center min-w-3 h-3 shadow border border-[#FFFFFF]">
+                  {wishlistCount}
                 </span>
               )}
             </button>
@@ -243,6 +285,15 @@ export default function Header({ currentTab, setCurrentTab, cartCount, onOpenCar
                 <p className="text-xs text-[#64748B]">Masuk sebagai</p>
                 <p className="text-sm font-bold text-[#1A1A1A]">{currentUser.nama_lengkap}</p>
               </div>
+              <button
+                onClick={() => {
+                  onOpenProfile?.();
+                  setOpen(false);
+                }}
+                className="block w-full text-left px-4 py-3 rounded-xl text-sm font-bold text-[#1A1A1A] hover:bg-[#F8FAFC] transition-colors"
+              >
+                Edit Profil
+              </button>
               <button
                 onClick={() => {
                   onLogout?.();
