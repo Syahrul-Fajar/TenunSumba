@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { Product, ContactMessage, Order, Article, OrderItem, Kategori, Penenun, KelompokPenenun, Promo, Review, Pembayaran, Pengiriman, StokLog, User, KeranjangItem, Notifikasi, CustomSize, Wishlist, Alamat, Admin, DetailPesanan } from '../types';
 import { PRODUCTS } from '../data/products';
 
-const rawSupabaseUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || '').trim();
-const supabaseAnonKey = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '').trim();
+const rawSupabaseUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : '') || '').trim();
+const supabaseAnonKey = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_ANON_KEY : '') || '').trim();
 
 const supabaseUrl = rawSupabaseUrl.endsWith('/rest/v1/')
   ? rawSupabaseUrl.slice(0, -9)
@@ -31,17 +31,19 @@ const LOCAL_ORDERS_KEY = 'cd_seraphine_orders';
 const LOCAL_ARTICLES_KEY = 'cd_seraphine_articles';
 
 // Initialize LocalStorage empty tables if not present
-if (!localStorage.getItem(LOCAL_PRODUCTS_KEY)) {
-  localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify([]));
-}
-if (!localStorage.getItem(LOCAL_INQUIRIES_KEY)) {
-  localStorage.setItem(LOCAL_INQUIRIES_KEY, JSON.stringify([]));
-}
-if (!localStorage.getItem(LOCAL_ORDERS_KEY)) {
-  localStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify([]));
-}
-if (!localStorage.getItem(LOCAL_ARTICLES_KEY)) {
-  localStorage.setItem(LOCAL_ARTICLES_KEY, JSON.stringify([]));
+if (typeof localStorage !== 'undefined') {
+  if (!localStorage.getItem(LOCAL_PRODUCTS_KEY)) {
+    localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify([]));
+  }
+  if (!localStorage.getItem(LOCAL_INQUIRIES_KEY)) {
+    localStorage.setItem(LOCAL_INQUIRIES_KEY, JSON.stringify([]));
+  }
+  if (!localStorage.getItem(LOCAL_ORDERS_KEY)) {
+    localStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify([]));
+  }
+  if (!localStorage.getItem(LOCAL_ARTICLES_KEY)) {
+    localStorage.setItem(LOCAL_ARTICLES_KEY, JSON.stringify([]));
+  }
 }
 
 // Low-level pure client fallbacks
@@ -55,7 +57,7 @@ const localDb = {
     }
   },
   saveProducts: (products: Product[]) => {
-    localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(products));
+    if (typeof localStorage !== 'undefined') localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(products));
   },
   getInquiries: () => {
     try {
@@ -65,7 +67,7 @@ const localDb = {
     }
   },
   saveInquiries: (inquiries: any[]) => {
-    localStorage.setItem(LOCAL_INQUIRIES_KEY, JSON.stringify(inquiries));
+    if (typeof localStorage !== 'undefined') localStorage.setItem(LOCAL_INQUIRIES_KEY, JSON.stringify(inquiries));
   },
   getOrders: (): Order[] => {
     try {
@@ -75,7 +77,7 @@ const localDb = {
     }
   },
   saveOrders: (orders: Order[]) => {
-    localStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify(orders));
+    if (typeof localStorage !== 'undefined') localStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify(orders));
   },
   getArticles: (): Article[] => {
     try {
@@ -85,7 +87,7 @@ const localDb = {
     }
   },
   saveArticles: (articles: Article[]) => {
-    localStorage.setItem(LOCAL_ARTICLES_KEY, JSON.stringify(articles));
+    if (typeof localStorage !== 'undefined') localStorage.setItem(LOCAL_ARTICLES_KEY, JSON.stringify(articles));
   }
 };
 
@@ -301,8 +303,7 @@ export const dbService = {
             nama_lengkap: order.customerName,
             email: `guest_${Date.now()}_${Math.floor(Math.random() * 1000)}@example.com`,
             password: 'guest_checkout',
-            no_telepon: order.customerPhone,
-            alamat: order.customerAddress
+            no_telepon: order.customerPhone
           }])
           .select();
 
@@ -313,6 +314,30 @@ export const dbService = {
 
         if (!userData || userData.length === 0) {
           throw new Error('Failed to create guest user record.');
+        }
+
+        if (order.customerAddress && order.customerAddress.trim() !== '') {
+          try {
+            const now = new Date().toISOString();
+            await supabase.from('alamat').insert([{
+              id_user: userData[0].id_user,
+              label: 'Rumah',
+              penerima: order.customerName,
+              no_hp: order.customerPhone || '',
+              provinsi: '-',
+              kota: '-',
+              kecamatan: '-',
+              kelurahan: '-',
+              kode_pos: '-',
+              alamat_lengkap: order.customerAddress.trim(),
+              is_default: true,
+              is_active: true,
+              created_at: now,
+              updated_at: now
+            }]);
+          } catch (err) {
+            console.error('Failed to save guest address:', err);
+          }
         }
 
         // 2. Insert order using the generated id_user
@@ -816,13 +841,36 @@ export const dbService = {
     if (existing && existing.length > 0) throw new Error('Email sudah terdaftar. Silakan gunakan email lain.');
     const { data: result, error } = await supabase
       .from('users')
-      .insert([{ nama_lengkap: data.nama_lengkap, email: data.email, password: data.password, no_telepon: data.no_telepon || '', alamat: data.alamat || '' }])
+      .insert([{ nama_lengkap: data.nama_lengkap, email: data.email, password: data.password, no_telepon: data.no_telepon || '' }])
       .select();
     if (error) throw new Error(error.message);
     const user = result![0] as User;
+    if (data.alamat && data.alamat.trim() !== '') {
+      try {
+        const now = new Date().toISOString();
+        await supabase.from('alamat').insert([{
+          id_user: user.id_user,
+          label: 'Rumah',
+          penerima: data.nama_lengkap,
+          no_hp: data.no_telepon || '',
+          provinsi: '-',
+          kota: '-',
+          kecamatan: '-',
+          kelurahan: '-',
+          kode_pos: '-',
+          alamat_lengkap: data.alamat.trim(),
+          is_default: true,
+          is_active: true,
+          created_at: now,
+          updated_at: now
+        }]);
+      } catch (err) {
+        console.error('Failed to save initial address:', err);
+      }
+    }
     // Strip password from returned object
     const { password: _pw, ...safeUser } = user;
-    return safeUser as User;
+    return { ...safeUser, alamat: data.alamat || '' } as User;
   },
 
   async loginUser(email: string, password: string): Promise<User> {
@@ -837,13 +885,54 @@ export const dbService = {
     if (!data || data.length === 0) throw new Error('Email atau password salah.');
     const user = data[0] as User;
     const { password: _pw, ...safeUser } = user;
+    try {
+      const { data: alamatData } = await supabase.from('alamat').select('alamat_lengkap').eq('id_user', safeUser.id_user).is('deleted_at', null).order('is_default', { ascending: false }).limit(1);
+      if (alamatData && alamatData.length > 0) {
+        safeUser.alamat = alamatData[0].alamat_lengkap;
+      }
+    } catch (err) {
+      console.error('Failed to fetch address during login:', err);
+    }
     return safeUser as User;
   },
 
   async updateUserProfile(id_user: number, updates: Partial<Pick<User, 'nama_lengkap' | 'no_telepon' | 'alamat'>>): Promise<boolean> {
     if (!supabase) return false;
-    const { error } = await supabase.from('users').update(updates).eq('id_user', id_user);
-    if (error) throw new Error(error.message);
+    const { alamat, ...userUpdates } = updates;
+    if (Object.keys(userUpdates).length > 0) {
+      const { error } = await supabase.from('users').update(userUpdates).eq('id_user', id_user);
+      if (error) throw new Error(error.message);
+    }
+    if (alamat !== undefined) {
+      try {
+        const now = new Date().toISOString();
+        const { data: existingAlamat } = await supabase.from('alamat').select('id_alamat').eq('id_user', id_user).is('deleted_at', null).order('is_default', { ascending: false }).limit(1);
+        if (existingAlamat && existingAlamat.length > 0) {
+          await supabase.from('alamat').update({ alamat_lengkap: alamat, updated_at: now }).eq('id_alamat', existingAlamat[0].id_alamat);
+        } else if (alamat.trim() !== '') {
+          const { data: userData } = await supabase.from('users').select('nama_lengkap, no_telepon').eq('id_user', id_user).limit(1);
+          const u = userData && userData.length > 0 ? userData[0] : { nama_lengkap: 'Pengguna', no_telepon: '' };
+          await supabase.from('alamat').insert([{
+            id_user,
+            label: 'Rumah',
+            penerima: u.nama_lengkap,
+            no_hp: u.no_telepon || '',
+            provinsi: '-',
+            kota: '-',
+            kecamatan: '-',
+            kelurahan: '-',
+            kode_pos: '-',
+            alamat_lengkap: alamat,
+            is_default: true,
+            is_active: true,
+            created_at: now,
+            updated_at: now
+          }]);
+        }
+      } catch (err) {
+        console.error('Failed to update address in updateUserProfile:', err);
+      }
+    }
     return true;
   },
 
@@ -864,7 +953,7 @@ export const dbService = {
         id_user: row.id_user,
         id_produk: row.id_produk,
         jumlah: row.jumlah,
-        ukuran: row.ukuran || '',
+        ukuran: row.varian || row.ukuran || '',
         nama_produk: row.produk?.nama_produk || '',
         harga: row.produk?.harga || 0,
         gambar: row.produk?.gambar || '',
@@ -874,13 +963,13 @@ export const dbService = {
 
   async upsertKeranjang(item: { id_user: number; id_produk: number; jumlah: number; ukuran?: string }): Promise<boolean> {
     if (!supabase) return false;
-    // Try to find existing row for this user+product+ukuran
+    // Try to find existing row for this user+product+varian
     const { data: existing } = await supabase
       .from('keranjang')
       .select('id_keranjang, jumlah')
       .eq('id_user', item.id_user)
       .eq('id_produk', item.id_produk)
-      .eq('ukuran', item.ukuran || '')
+      .eq('varian', item.ukuran || '')
       .limit(1);
     if (existing && existing.length > 0) {
       const { error } = await supabase
@@ -891,7 +980,7 @@ export const dbService = {
     } else {
       const { error } = await supabase
         .from('keranjang')
-        .insert([{ id_user: item.id_user, id_produk: item.id_produk, jumlah: item.jumlah, ukuran: item.ukuran || '' }]);
+        .insert([{ id_user: item.id_user, id_produk: item.id_produk, jumlah: item.jumlah, varian: item.ukuran || '' }]);
       if (error) { console.error(error); return false; }
     }
     return true;
@@ -900,7 +989,7 @@ export const dbService = {
   async removeFromKeranjang(id_user: number, id_produk: number, ukuran?: string): Promise<boolean> {
     if (!supabase) return false;
     const query = supabase.from('keranjang').delete().eq('id_user', id_user).eq('id_produk', id_produk);
-    if (ukuran !== undefined) query.eq('ukuran', ukuran);
+    if (ukuran !== undefined) query.eq('varian', ukuran);
     const { error } = await query;
     if (error) { console.error(error); return false; }
     return true;
@@ -1111,10 +1200,11 @@ export const dbService = {
   },
   async saveAlamat(a: Omit<Alamat, 'id_alamat' | 'created_at' | 'updated_at' | 'deleted_at'> & { id_alamat?: number }): Promise<Alamat> {
     if (!supabase) throw new Error('Supabase error');
+    const now = new Date().toISOString();
     if (a.is_default) await supabase.from('alamat').update({ is_default: false }).eq('id_user', a.id_user).eq('is_default', true);
     let result;
-    if (a.id_alamat) result = await supabase.from('alamat').update(a).eq('id_alamat', a.id_alamat).select();
-    else result = await supabase.from('alamat').insert([a]).select();
+    if (a.id_alamat) result = await supabase.from('alamat').update({ ...a, updated_at: now }).eq('id_alamat', a.id_alamat).select();
+    else result = await supabase.from('alamat').insert([{ ...a, created_at: now, updated_at: now }]).select();
     if (result.error) throw result.error;
     return result.data[0] as Alamat;
   },
@@ -1178,11 +1268,25 @@ export const dbService = {
     try {
       const { data, error } = await supabase.from('pesanan').select('*').eq('id_user', id_user).order('created_at', { ascending: false });
       if (error) return [];
-      return data.map((d: any) => ({
-        id: String(d.id_pesanan), customerName: d.nama_pelanggan || '', customerEmail: d.email || '',
-        customerPhone: d.no_telepon || '', customerAddress: d.alamat || '', status: d.status || 'menunggu_pembayaran',
-        totalPrice: Number(d.total_harga), createdAt: d.created_at, items: []
-      })) as Order[];
+      return data.map((d: any) => {
+        let customerName = d.nama_pelanggan || '';
+        let customerPhone = d.no_telepon || '';
+        let customerAddress = d.alamat || '';
+        if (d.catatan && typeof d.catatan === 'string' && d.catatan.includes(' | ')) {
+          const parts = d.catatan.split(' | ');
+          if (!customerName && parts[0]) customerName = parts[0].trim();
+          if (!customerPhone && parts[1]) customerPhone = parts[1].trim();
+          if (!customerAddress && parts[2]) customerAddress = parts[2].trim();
+        }
+        if (!customerAddress && d.alamat_snapshot) {
+          customerAddress = typeof d.alamat_snapshot === 'string' ? d.alamat_snapshot : JSON.stringify(d.alamat_snapshot);
+        }
+        return {
+          id: String(d.id_pesanan), customerName, customerEmail: d.email || '',
+          customerPhone, customerAddress, status: d.status || 'menunggu_pembayaran',
+          totalPrice: Number(d.total_harga), createdAt: d.created_at, items: []
+        };
+      }) as Order[];
     } catch { return []; }
   },
   async getAuditLog(): Promise<any[]> {
